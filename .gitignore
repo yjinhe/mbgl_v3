@@ -1,0 +1,16 @@
+node_modules/
+.DS_Store
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+test-results/
+playwright-report/
+docs/screenshots/*.png
+docs/screenshots/*.jpg
+docs/screenshots/*.webp

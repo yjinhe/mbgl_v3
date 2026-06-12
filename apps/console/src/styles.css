@@ -1,0 +1,16 @@
+@import "../../../packages/ui/styles/tokens.css";
+@import "../../../packages/ui/styles/base.css";
+@import "../../../packages/ui/styles/console.css";
+
+.console-stage {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.admin-note {
+  font-size: 11px;
+  color: var(--ink-3);
+}

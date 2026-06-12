@@ -1,0 +1,22 @@
+{
+  "name": "tangji-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @tangji/api --filter @tangji/web --filter @tangji/console dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "e2e": "playwright test",
+    "style:extract": "node scripts/extract-styles.mjs",
+    "seed": "pnpm --filter @tangji/api seed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.46.1",
+    "@types/node": "^20.14.10",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  },
+  "packageManager": "pnpm@10.33.1"
+}

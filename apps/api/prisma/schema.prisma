@@ -1,0 +1,190 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  openid       String    @unique
+  nickname     String    @default("微信用户")
+  sex          String?
+  unit         String    @default("mmol")
+  fastingLow   Decimal   @default(4.4)
+  fastingHigh  Decimal   @default(7.0)
+  postMealHigh Decimal   @default(10.0)
+  deactivatedAt DateTime?
+  createdAt    DateTime  @default(now())
+  glucose      GlucoseRecord[]
+  bp           BpRecord[]
+  lipid        LipidRecord[]
+  uric         UricRecord[]
+  summaries    DailySummary[]
+  binding      PharmacyCustomer[]
+}
+
+model GlucoseRecord {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  valueMmol  Decimal
+  period     String
+  measuredAt DateTime
+  tags       String   @default("[]")
+  note       String   @default("")
+  deletedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, measuredAt])
+  @@index([userId, deletedAt])
+}
+
+model BpRecord {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  sbp        Int
+  dbp        Int
+  pulse      Int?
+  period     String
+  measuredAt DateTime
+  tags       String   @default("[]")
+  note       String   @default("")
+  deletedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, measuredAt])
+}
+
+model LipidRecord {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  tc         Decimal?
+  tg         Decimal?
+  ldl        Decimal?
+  hdl        Decimal?
+  fasting    Boolean  @default(true)
+  measuredAt DateTime
+  note       String   @default("")
+  deletedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, measuredAt])
+}
+
+model UricRecord {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  value      Int
+  fasting    Boolean  @default(true)
+  measuredAt DateTime
+  note       String   @default("")
+  deletedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, measuredAt])
+}
+
+model DailySummary {
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+  date    String
+  avg     Decimal
+  max     Decimal
+  min     Decimal
+  count   Int
+  okCount Int
+
+  @@unique([userId, date])
+}
+
+model Pharmacy {
+  id         String   @id @default(cuid())
+  name       String
+  address    String   @default("")
+  phone      String   @default("")
+  disabledAt DateTime?
+  createdAt  DateTime @default(now())
+  staff      PharmacyStaff[]
+  customers  PharmacyCustomer[]
+  invites    InviteCode[]
+}
+
+model PharmacyStaff {
+  id           String   @id @default(cuid())
+  pharmacyId   String
+  pharmacy     Pharmacy @relation(fields: [pharmacyId], references: [id])
+  username     String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("staff")
+  disabledAt   DateTime?
+  createdAt    DateTime @default(now())
+}
+
+model InviteCode {
+  id         String   @id @default(cuid())
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id])
+  staffId    String
+  code       String   @unique
+  expiresAt  DateTime
+  disabledAt DateTime?
+  createdAt  DateTime @default(now())
+  bindings   PharmacyCustomer[]
+}
+
+model PharmacyCustomer {
+  id           String   @id @default(cuid())
+  pharmacyId   String
+  pharmacy     Pharmacy @relation(fields: [pharmacyId], references: [id])
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  inviteCodeId String?
+  inviteCode   InviteCode? @relation(fields: [inviteCodeId], references: [id])
+  consentAt    DateTime @default(now())
+  unboundAt    DateTime?
+
+  @@index([pharmacyId, unboundAt])
+  @@index([userId, unboundAt])
+}
+
+model FollowUp {
+  id         String   @id @default(cuid())
+  pharmacyId String
+  staffId    String
+  metric     String
+  recordId   String
+  note       String   @default("")
+  createdAt  DateTime @default(now())
+
+  @@unique([pharmacyId, metric, recordId])
+}
+
+model PharmacyAccessLog {
+  id         String   @id @default(cuid())
+  pharmacyId String
+  staffId    String
+  userId     String
+  action     String
+  createdAt  DateTime @default(now())
+
+  @@index([pharmacyId, createdAt])
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}

@@ -1,0 +1,40 @@
+{
+  "name": "@tangji/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/init-dev-db.ts && tsx watch src/server.ts",
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "seed": "tsx prisma/seed.ts",
+    "dev:init-db": "tsx src/init-dev-db.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@fastify/jwt": "^8.0.1",
+    "@prisma/client": "^5.22.0",
+    "@tangji/shared": "workspace:*",
+    "archiver": "^6.0.2",
+    "bcryptjs": "^2.4.3",
+    "fastify": "^4.29.1",
+    "fastify-plugin": "^4.5.1",
+    "node-cron": "^3.0.3",
+    "qrcode": "^1.5.4",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.3",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/qrcode": "^1.5.5",
+    "@types/supertest": "^6.0.3",
+    "prisma": "^5.22.0",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.6",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}

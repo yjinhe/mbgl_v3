@@ -1,0 +1,29 @@
+:root{
+  --ink:#16302B;            /* 松墨 */
+  --ink-2:#41534E;
+  --ink-3:#7A8A85;
+  --paper:#F2F5F3;          /* 屏内底色 */
+  --card:#FFFFFF;
+  --line:#E4EAE7;
+  --brand:#0E7E6B;          /* 临床青绿 */
+  --brand-deep:#0A5A4C;
+  --brand-soft:#E2F1EC;
+  --ok:#19A77E;             /* 达标 */
+  --ok-soft:#E4F5EE;
+  --hi:#E8833A;             /* 偏高 */
+  --hi-soft:#FCEFE3;
+  --danger:#D6453D;         /* 低血糖 / 显著偏高 */
+  --danger-soft:#FBE9E7;
+  --lo:#4A7DDB;             /* 偏低 */
+  --lo-soft:#E9F0FC;
+  --desk:#0F2420;           /* 桌面背景 */
+  --r-card:18px;
+  --shadow-card:0 1px 2px rgba(22,48,43,.05),0 6px 18px rgba(22,48,43,.05);
+  --font:-apple-system,BlinkMacSystemFont,"PingFang SC","MiSans","HarmonyOS Sans SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+}
+:root{
+  --m-glucose:#0E7E6B; --m-glucose-soft:#E2F1EC;
+  --m-bp:#3E63C9;      --m-bp-soft:#E8EDFA;
+  --m-lipid:#C77B33;   --m-lipid-soft:#FAF0E3;
+  --m-uric:#7A5BBF;    --m-uric-soft:#F0EAFA;
+}

@@ -1,0 +1,42 @@
+@import "../../../packages/ui/styles/tokens.css";
+@import "../../../packages/ui/styles/base.css";
+@import "../../../packages/ui/styles/mobile.css";
+
+.app-stage {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.login-card {
+  width: 330px;
+  background: var(--card);
+  border-radius: 20px;
+  padding: 28px 26px 24px;
+  box-shadow: var(--shadow-card);
+}
+
+.micon {
+  width: 18px;
+  height: 18px;
+}
+
+.hero-empty {
+  min-height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: pre-line;
+  text-align: center;
+  color: #C5DDD4;
+  font-size: 13px;
+  line-height: 1.8;
+  position: relative;
+  z-index: 1;
+}
+
+.sheet-open {
+  display: block;
+}
