@@ -1,0 +1,56 @@
+<view class="app-stage">
+  <view class="screen">
+    <view class="safe-navbar" style="{{navStyle}}"><view class="title">我的</view></view>
+    <view class="pages">
+      <view class="page on">
+        <block wx:if="{{!authed}}">
+          <view class="login-card card">
+            <view class="me-head"><view class="avatar">糖</view><view><view class="n">糖迹</view><view class="d">登录后管理健康档案</view></view></view>
+            <button class="btn primary" bindtap="login">微信一键登录</button>
+          </view>
+        </block>
+        <block wx:else>
+          <view class="me-head"><view class="avatar">糖</view><view><view class="n">{{me.nickname}}</view><view class="d">已记录 {{me.stats.totalRecords}} 条 · 覆盖 {{me.stats.coveredDays}} 天</view></view></view>
+
+          <view class="sec-label">健康档案</view>
+          <view class="card cell-card">
+            <view class="cell">
+              <view class="cm"><view class="ct">性别</view><view class="cs">影响尿酸参考上限</view></view>
+              <view class="seg mini-seg"><button class="{{sexMaleClass}}" data-key="sex" data-value="male" bindtap="patch">男</button><button class="{{sexFemaleClass}}" data-key="sex" data-value="female" bindtap="patch">女</button></view>
+            </view>
+            <view class="cell">
+              <view class="cm"><view class="ct">血糖单位</view><view class="cs">仅血糖支持单位切换</view></view>
+              <view class="seg unit-seg"><button class="{{unitMmolClass}}" data-key="unit" data-value="mmol" bindtap="patch">mmol</button><button class="{{unitMgdlClass}}" data-key="unit" data-value="mgdl" bindtap="patch">mg/dL</button></view>
+            </view>
+          </view>
+
+          <view class="sec-label">服务药房</view>
+          <view class="card">
+            <view wx:if="{{me.binding}}" class="bound-cell">
+              <view class="bi"><view class="bn">{{me.binding.pharmacyName}}</view><view class="bs">{{bindingText}}</view></view>
+              <button class="danger-text" bindtap="unbind">解绑</button>
+            </view>
+            <view wx:else class="cell" bindtap="goBind">
+              <view class="cm"><view class="ct brand">＋ 绑定服务药房</view><view class="cs">输入药房邀请码，获得用药与健康管理服务</view></view>
+              <view class="cv">›</view>
+            </view>
+          </view>
+
+          <view class="sec-label">数据与隐私</view>
+          <view class="card cell-card">
+            <view class="cell" bindtap="goRecycle"><view class="cm"><view class="ct">回收站</view><view class="cs">删除的记录保留 7 天</view></view><view class="cv">›</view></view>
+            <view class="cell" bindtap="logout"><view class="cm"><view class="ct">退出登录</view><view class="cs">仅清除本机登录状态</view></view></view>
+          </view>
+          <view class="foot-note">糖迹仅作记录工具，不提供诊断与用药建议，请遵医嘱</view>
+        </block>
+      </view>
+    </view>
+    <view class="tabbar">
+      <button class="tab" data-tab="home" bindtap="switchPage"><text class="ti">⌂</text><text>首页</text></button>
+      <button class="tab" data-tab="history" bindtap="switchPage"><text class="ti">☰</text><text>历史</text></button>
+      <view class="fab-slot"><button class="fab" data-tab="record" bindtap="switchPage"><view class="drop"></view></button><text class="fab-label">记一笔</text></view>
+      <button class="tab" data-tab="stats" bindtap="switchPage"><text class="ti">↗</text><text>统计</text></button>
+      <button class="tab on" data-tab="mine" bindtap="switchPage"><text class="ti">◯</text><text>我的</text></button>
+    </view>
+  </view>
+</view>

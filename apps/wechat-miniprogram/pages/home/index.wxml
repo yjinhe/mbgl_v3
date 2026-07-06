@@ -1,0 +1,79 @@
+<view class="app-stage">
+  <view class="screen">
+    <view class="safe-navbar" style="{{navStyle}}">
+      <view class="title"><view class="inline-drop"></view><text>糖迹</text></view>
+    </view>
+
+    <view class="pages">
+      <view class="page on">
+        <block wx:if="{{!authed}}">
+          <view class="login-card card">
+            <view class="me-head">
+              <view class="avatar">糖</view>
+              <view><view class="n">糖迹</view><view class="d">5 秒记一次健康数据</view></view>
+            </view>
+            <button class="btn primary" loading="{{loading}}" bindtap="login">微信一键登录</button>
+          </view>
+        </block>
+
+        <block wx:else>
+          <view class="greet">
+            <view>
+              <view class="hello">{{greeting}}</view>
+              <view class="date">{{dateLine}} · 今天已记 {{todayCount}} 笔</view>
+            </view>
+            <view class="streak">连续记录 {{streak}} 天</view>
+          </view>
+
+          <block wx:for="{{cards}}" wx:key="key">
+            <view wx:if="{{item.isGlucose}}" class="hero" data-metric="{{item.key}}" bindtap="goStats">
+              <block wx:if="{{item.empty}}">
+                <view class="hero-empty">还没有记录
+点下方水滴按钮，记下第一条血糖</view>
+              </block>
+              <block wx:else>
+                <view class="lab"><text>血糖 · 最近一次 · {{item.periodText}}</text><text class="num">{{item.dateText}} {{item.timeText}}</text></view>
+                <view class="read"><text class="v num">{{item.valueText}}</text><text class="u">{{item.unitText}}</text></view>
+                <view class="meta"><text class="pill {{item.statusClass}}">● {{item.statusLabel}}</text><text>{{item.targetText}}</text></view>
+                <view class="gauge"><view class="band" style="left:{{item.bandLeft}};width:{{item.bandWidth}}"></view><view class="dot" style="left:{{item.dotLeft}};background:{{item.statusColorValue}}"></view></view>
+                <view class="gx num"><text>2.0</text><text>10.0</text><text>20.0</text></view>
+              </block>
+            </view>
+
+            <view wx:elif="{{!item.isGlucose}}" class="mcard" data-metric="{{item.key}}" bindtap="goStats">
+              <view class="brow">
+                <view class="mic" style="{{item.softStyle}}">{{item.iconText}}</view>
+                <text class="bt">{{item.name}}</text>
+                <text wx:if="{{!item.empty}}">{{item.headLeftText}}</text>
+                <text wx:if="{{!item.empty}}" class="when num">{{item.headTimeText}}</text>
+              </view>
+              <view wx:if="{{item.empty}}" class="empty" data-metric="{{item.key}}" catchtap="goRecord">还没有{{item.name}}记录 · 点下方按钮记一笔</view>
+              <block wx:else>
+                <view wx:if="{{item.isBp}}">
+                  <view class="mainrow"><text class="mv num" style="{{item.statusStyle}}">{{item.valueText}}</text><text class="mu">mmHg</text><text class="mu">{{item.extraText}}</text><text class="pill {{item.statusClass}}">{{item.statusLabel}}</text></view>
+                  <view class="sub">{{item.subText}}</view>
+                </view>
+                <view wx:elif="{{item.isLipid}}" class="lgrid">
+                  <view wx:for="{{item.lipid}}" wx:key="label" class="li"><text>{{item.label}}</text><text class="strong num" style="{{item.style}}">{{item.value}}</text></view>
+                </view>
+                <view wx:else>
+                  <view class="mainrow"><text class="mv num" style="{{item.statusStyle}}">{{item.valueText}}</text><text class="mu">μmol/L</text><text class="pill {{item.statusClass}}">{{item.statusLabel}}</text></view>
+                  <view class="sub">{{item.subText}}</view>
+                </view>
+              </block>
+            </view>
+          </block>
+          <view class="foot-note">点击任意指标卡查看统计详情</view>
+        </block>
+      </view>
+    </view>
+
+    <view class="tabbar">
+      <button class="tab on" data-tab="home" bindtap="switchPage"><text class="ti">⌂</text><text>首页</text></button>
+      <button class="tab" data-tab="history" bindtap="switchPage"><text class="ti">☰</text><text>历史</text></button>
+      <view class="fab-slot"><button class="fab" data-tab="record" bindtap="switchPage"><view class="drop"></view></button><text class="fab-label">记一笔</text></view>
+      <button class="tab" data-tab="stats" bindtap="switchPage"><text class="ti">↗</text><text>统计</text></button>
+      <button class="tab" data-tab="mine" bindtap="switchPage"><text class="ti">◯</text><text>我的</text></button>
+    </view>
+  </view>
+</view>

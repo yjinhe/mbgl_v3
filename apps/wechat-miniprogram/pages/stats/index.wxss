@@ -1,0 +1,33 @@
+.msg {
+  margin: 8rpx 0 20rpx;
+}
+
+.range-row {
+  padding-bottom: 14rpx;
+}
+
+.trend-card {
+  margin-top: 4rpx;
+}
+
+.bars {
+  height: 260rpx;
+  padding: 24rpx 8rpx 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 10rpx;
+}
+
+.bar-wrap {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+}
+
+.trend-bar {
+  width: 100%;
+  min-height: 18rpx;
+  border-radius: 999rpx 999rpx 10rpx 10rpx;
+  background: linear-gradient(180deg, #19A77E, #0E7E6B);
+  opacity: .82;
+}

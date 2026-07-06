@@ -136,6 +136,63 @@ describe('app records', () => {
     expect(recycle.body.items.some((item: any) => item.id === id)).toBe(true);
     await request(app.server).post(`/api/app/records/glucose/${id}/restore`).set('Authorization', `Bearer ${appToken}`).expect(200);
   });
+
+  test('builds weekly report from metrics recorded in the last 7 days', async () => {
+    await request(app.server)
+      .post('/api/app/records/bp')
+      .set('Authorization', `Bearer ${appToken}`)
+      .send({ sbp: 128, dbp: 82, pulse: 72, period: 'morning', measuredAt: new Date().toISOString() })
+      .expect(201);
+    await request(app.server)
+      .post('/api/app/records/lipid')
+      .set('Authorization', `Bearer ${appToken}`)
+      .send({ tc: 4.9, tg: 1.4, ldl: 2.8, hdl: 1.2, measuredAt: new Date().toISOString() })
+      .expect(201);
+    await request(app.server)
+      .post('/api/app/records/uric')
+      .set('Authorization', `Bearer ${appToken}`)
+      .send({ value: 390, measuredAt: new Date().toISOString() })
+      .expect(201);
+
+    const report = await request(app.server).get('/api/app/report/weekly').set('Authorization', `Bearer ${appToken}`).expect(200);
+    expect(report.body.title).toBe('近 7 天健康报告');
+    expect(report.body.rangeDays).toBe(7);
+    expect(report.body.sections.glucose.n).toBeGreaterThan(0);
+    expect(report.body.sections.bp.avgSbp).toBeGreaterThan(0);
+    expect(report.body.sections.lipid.latest.tc).toBe(4.9);
+    expect(report.body.sections.uric.latest.value).toBe(390);
+  });
+
+  test('exports a single metric as csv and all metrics as zip', async () => {
+    await request(app.server)
+      .post('/api/app/records/bp')
+      .set('Authorization', `Bearer ${appToken}`)
+      .send({ sbp: 132, dbp: 84, pulse: 70, period: 'morning', measuredAt: new Date().toISOString(), note: '导出测试' })
+      .expect(201);
+
+    const csv = await request(app.server)
+      .get('/api/app/export/csv?metric=bp')
+      .set('Authorization', `Bearer ${appToken}`)
+      .expect(200);
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.text).toContain('日期,时间,收缩压(mmHg),舒张压(mmHg),脉搏,时段,状态,备注');
+    expect(csv.text).toContain('132,84,70');
+    expect(csv.text).toContain('导出测试');
+
+    const zip = await request(app.server)
+      .get('/api/app/export/csv?metric=all')
+      .set('Authorization', `Bearer ${appToken}`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    expect(zip.headers['content-type']).toContain('application/zip');
+    expect(Buffer.isBuffer(zip.body)).toBe(true);
+    expect(zip.body.subarray(0, 2).toString('utf8')).toBe('PK');
+  });
 });
 
 describe('binding and alerts', () => {
@@ -216,8 +273,34 @@ describe('invites and admin', () => {
     expect(res.body.qrContent).toContain(res.body.code);
   });
 
+  test('owner can create, disable and enable pharmacy staff', async () => {
+    const created = await request(app.server)
+      .post('/api/pharmacy/staff')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ username: 'kn_new_staff', name: '新店员', password: 'Staff@123', role: 'staff' })
+      .expect(200);
+    expect(created.body.username).toBe('kn_new_staff');
+    expect(created.body.disabledAt).toBeNull();
+
+    const disabledAt = new Date().toISOString();
+    const disabled = await request(app.server)
+      .patch(`/api/pharmacy/staff/${created.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ disabledAt })
+      .expect(200);
+    expect(disabled.body.disabledAt).toBeTruthy();
+
+    const enabled = await request(app.server)
+      .patch(`/api/pharmacy/staff/${created.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ disabledAt: null })
+      .expect(200);
+    expect(enabled.body.disabledAt).toBeNull();
+  });
+
   test('owner can list staff and admin can create/disable pharmacies', async () => {
-    await request(app.server).get('/api/pharmacy/staff').set('Authorization', `Bearer ${ownerToken}`).expect(200);
+    const staff = await request(app.server).get('/api/pharmacy/staff').set('Authorization', `Bearer ${ownerToken}`).expect(200);
+    expect(staff.body.items.length).toBeGreaterThan(0);
     const created = await request(app.server)
       .post('/api/admin/pharmacies')
       .set('Authorization', `Bearer ${adminToken}`)

@@ -1,0 +1,14 @@
+.msg {
+  margin: 8rpx 0 20rpx;
+}
+
+.delete-mini {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 18rpx;
+  align-self: center;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 22rpx;
+  font-weight: 750;
+}

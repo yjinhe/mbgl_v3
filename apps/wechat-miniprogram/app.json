@@ -1,0 +1,20 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/history/index",
+    "pages/record/index",
+    "pages/stats/index",
+    "pages/mine/index",
+    "pages/bind/index",
+    "pages/recycle/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "糖迹",
+    "navigationBarBackgroundColor": "#F2F5F3",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F2F5F3",
+    "navigationStyle": "custom"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

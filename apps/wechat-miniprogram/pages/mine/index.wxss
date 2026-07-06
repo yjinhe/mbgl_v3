@@ -1,0 +1,120 @@
+.me-head {
+  display: flex;
+  align-items: center;
+  gap: 26rpx;
+  padding: 24rpx 8rpx 32rpx;
+}
+
+.avatar {
+  width: 108rpx;
+  height: 108rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: #fff;
+  font-size: 50rpx;
+  background: linear-gradient(140deg, #15B189, #0A5A4C);
+  box-shadow: 0 12rpx 28rpx rgba(14, 126, 107, .3);
+}
+
+.me-head .n {
+  font-size: 34rpx;
+  font-weight: 750;
+}
+
+.me-head .d {
+  margin-top: 6rpx;
+  color: var(--ink-3);
+  font-size: 23rpx;
+}
+
+.cell-card {
+  padding-top: 8rpx;
+  padding-bottom: 8rpx;
+}
+
+.cell {
+  min-height: 104rpx;
+  padding: 26rpx 4rpx;
+  border-bottom: 1rpx solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+}
+
+.cell:last-child {
+  border-bottom: 0;
+}
+
+.cell .cm {
+  flex: 1;
+}
+
+.cell .ct {
+  font-size: 28rpx;
+  font-weight: 550;
+}
+
+.cell .ct.brand {
+  color: var(--brand);
+}
+
+.cell .cs {
+  margin-top: 4rpx;
+  color: var(--ink-3);
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
+.cell .cv {
+  color: var(--ink-3);
+  font-size: 32rpx;
+}
+
+.mini-seg {
+  width: 148rpx;
+  flex: none;
+}
+
+.unit-seg {
+  width: 220rpx;
+  flex: none;
+}
+
+.mini-seg button,
+.unit-seg button {
+  min-height: 52rpx;
+  font-size: 22rpx;
+}
+
+.bound-cell {
+  padding: 26rpx 30rpx;
+  border-radius: 28rpx;
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+  background: var(--brand-soft);
+}
+
+.bound-cell .bi {
+  flex: 1;
+}
+
+.bound-cell .bn {
+  color: var(--brand-deep);
+  font-size: 28rpx;
+  font-weight: 750;
+}
+
+.bound-cell .bs {
+  margin-top: 6rpx;
+  color: var(--ink-3);
+  font-size: 22rpx;
+}
+
+.danger-text {
+  color: var(--danger);
+  font-weight: 750;
+}

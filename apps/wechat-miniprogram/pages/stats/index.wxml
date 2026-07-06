@@ -1,0 +1,44 @@
+<view class="app-stage">
+  <view class="screen">
+    <view class="safe-navbar" style="{{navStyle}}"><view class="title">健康统计</view></view>
+    <view class="pages">
+      <view class="page on">
+        <block wx:if="{{!authed}}">
+          <view class="empty">登录后查看健康统计</view>
+          <button class="btn primary" bindtap="login">微信一键登录</button>
+        </block>
+        <block wx:else>
+          <view class="msg">
+            <button wx:for="{{metrics}}" wx:key="key" class="{{item.className}}" data-metric="{{item.key}}" bindtap="setMetric">{{item.name}}</button>
+          </view>
+          <view class="chiprow range-row">
+            <button class="chip {{range7Class}}" data-range="7" bindtap="setRange">7天</button>
+            <button class="chip {{range30Class}}" data-range="30" bindtap="setRange">30天</button>
+            <button class="chip {{range90Class}}" data-range="90" bindtap="setRange">90天</button>
+          </view>
+          <view class="mgrid">
+            <view wx:for="{{summary}}" wx:key="label" class="metric">
+              <view class="k">{{item.label}}</view>
+              <view class="v num">{{item.value}}<text class="unit">{{item.unit}}</text></view>
+            </view>
+          </view>
+          <view class="card trend-card">
+            <view class="card-h"><text class="t">趋势概览</text></view>
+            <view wx:if="{{!hasBars}}" class="empty">暂无趋势数据</view>
+            <view wx:else class="bars">
+              <view wx:for="{{bars}}" wx:key="id" class="bar-wrap"><view class="trend-bar" style="height:{{item.height}}rpx"></view></view>
+            </view>
+          </view>
+          <view class="foot-note">{{footnote}}</view>
+        </block>
+      </view>
+    </view>
+    <view class="tabbar">
+      <button class="tab" data-tab="home" bindtap="switchPage"><text class="ti">⌂</text><text>首页</text></button>
+      <button class="tab" data-tab="history" bindtap="switchPage"><text class="ti">☰</text><text>历史</text></button>
+      <view class="fab-slot"><button class="fab" data-tab="record" bindtap="switchPage"><view class="drop"></view></button><text class="fab-label">记一笔</text></view>
+      <button class="tab on" data-tab="stats" bindtap="switchPage"><text class="ti">↗</text><text>统计</text></button>
+      <button class="tab" data-tab="mine" bindtap="switchPage"><text class="ti">◯</text><text>我的</text></button>
+    </view>
+  </view>
+</view>

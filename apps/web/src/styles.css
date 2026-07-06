@@ -23,6 +23,33 @@
   height: 18px;
 }
 
+.hero .meta .pill {
+  background: color-mix(in srgb, var(--card) 14%, transparent);
+  color: var(--card);
+}
+
+.seg-ic {
+  width: 15px;
+  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.seg-ic .micon {
+  width: 15px;
+  height: 15px;
+}
+
+.mcard .brow .mic .micon {
+  width: 16.12px;
+  height: 16.12px;
+}
+
+.mcard .bpv {
+  letter-spacing: -0.010096em;
+}
+
 .hero-empty {
   min-height: 150px;
   display: flex;
@@ -30,7 +57,7 @@
   justify-content: center;
   white-space: pre-line;
   text-align: center;
-  color: #C5DDD4;
+  color: var(--brand-soft);
   font-size: 13px;
   line-height: 1.8;
   position: relative;
@@ -39,4 +66,8 @@
 
 .sheet-open {
   display: block;
+}
+
+.sheet:not(.on) {
+  height: 450px;
 }

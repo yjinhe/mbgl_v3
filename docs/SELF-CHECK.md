@@ -6,7 +6,12 @@
 - [x] A2 假状态栏+微信胶囊
 - [x] A3 TabBar 中央水滴按钮上浮 26px
 - [x] A4 hero 渐变/54px 大数字/gauge 目标带与圆点
-- [ ] A5-A10 录入键盘、提醒、单位、目标、图表逐项像素验收仍需截图收敛
+- [x] A5 录入键盘沿用 `.sheet/.keypad/.key.save` 原型类与提取 CSS
+- [x] A6 安全提醒 M1/M2/M8/M9/M10 按保存响应延迟弹出
+- [x] A7 血糖单位切换 E2E 覆盖，mg/dL/mmol 自动换算
+- [x] A8 目标带/大数字/五态颜色使用 shared 判定与原型 token
+- [x] A9 统计趋势与周报入口可用
+- [x] A10 自动视觉 diff 已建立；血糖首页与录入弹层 changedRatio=0，changedPixels=0（见 `docs/STYLE-DIFF.md`）
 
 ## B · 多指标 C 端
 
@@ -15,7 +20,9 @@
 - [x] B3 血脂至少一项校验与逐项五态圆点
 - [x] B4 尿酸性别阈值随「我的」性别切换
 - [x] B5 历史页一级指标 seg
-- [ ] B6-B8 周报、zip 导出、回收站完整交互待补齐
+- [x] B6 周报 `/api/app/report/weekly` + C 端周报子页已实现
+- [x] B7 单指标 CSV / 全部 ZIP 导出已实现并有 API/E2E 覆盖
+- [x] B8 回收站列表与恢复已实现；历史删除进入软删除
 
 ## C · 药房后台
 
@@ -24,8 +31,9 @@
 - [x] C3 客户列表 StatusDot 与筛选
 - [x] C5 预警中心标记跟进
 - [x] C6 生成邀请码和真实二维码
+- [x] C7 员工新增、停用、启用 UI + API 测试
 - [x] C8 admin 基础药房管理
-- [ ] C4/C7 图表复用和员工停启用 UI 仍需增强
+- [x] C4 客户详情已展示指标概览与趋势面板，并调用 `/stats` 同一统计服务
 
 ## D · 合规与隔离
 
@@ -34,4 +42,13 @@
 - [x] D4 B 端客户页 F10、邀请页 F11
 - [x] D5 AccessLog 在查看客户详情时落库
 - [x] D6 安全提醒触发线由 shared/API 测试覆盖
-- [ ] D3 UI 文案全文检索仍需最终清理
+- [x] D3 文案扫描完成：仅剩标准免责声明「不提供诊断与用药建议」
+
+## 验证摘要
+
+- `pnpm --filter @tangji/shared test`：79 tests passed
+- `pnpm --filter @tangji/api test`：18 tests passed
+- `pnpm --filter @tangji/web build`：passed
+- `pnpm --filter @tangji/console build`：passed
+- `pnpm e2e`：7 tests passed
+- `node scripts/visual-diff.mjs`：生成 `prototype-glucose-home.png` / `app-glucose-home.png` / `diff-glucose-home.png` / `prototype-glucose-sheet.png` / `app-glucose-sheet.png` / `diff-glucose-sheet.png`；当前血糖首页与录入弹层差异率均为 0%

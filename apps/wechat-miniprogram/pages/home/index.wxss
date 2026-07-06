@@ -1,0 +1,35 @@
+.login-card {
+  margin-top: 24vh;
+}
+
+.me-head {
+  display: flex;
+  align-items: center;
+  gap: 26rpx;
+  padding: 0 0 36rpx;
+}
+
+.avatar {
+  width: 108rpx;
+  height: 108rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: #fff;
+  font-size: 50rpx;
+  background: linear-gradient(140deg, #15B189, #0A5A4C);
+  box-shadow: 0 12rpx 28rpx rgba(14, 126, 107, .3);
+}
+
+.me-head .n {
+  font-size: 34rpx;
+  font-weight: 750;
+}
+
+.me-head .d {
+  margin-top: 6rpx;
+  color: var(--ink-3);
+  font-size: 23rpx;
+}

@@ -1,0 +1,56 @@
+.login-btn {
+  margin-top: 24rpx;
+}
+
+.record {
+  position: relative;
+  margin-top: 18rpx;
+  padding: 22rpx 22rpx 22rpx 34rpx;
+  display: flex;
+  gap: 16rpx;
+}
+
+.bar {
+  position: absolute;
+  left: 0;
+  top: 22rpx;
+  bottom: 22rpx;
+  width: 8rpx;
+  border-radius: 0 999rpx 999rpx 0;
+}
+
+.record-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.record-line {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-weight: 800;
+}
+
+.record-sub {
+  margin-top: 10rpx;
+  color: var(--ink-3);
+  font-size: 23rpx;
+  line-height: 1.5;
+}
+
+.record-value {
+  margin-top: 12rpx;
+  font-size: 32rpx;
+  font-weight: 850;
+}
+
+.restore {
+  width: 84rpx;
+  height: 54rpx;
+  border-radius: 18rpx;
+  align-self: center;
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  font-size: 23rpx;
+  font-weight: 800;
+}

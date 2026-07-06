@@ -125,14 +125,59 @@ function CustomerDetail({ setView }: any) {
   const id = sessionStorage.getItem('customerId');
   const [head, setHead] = useState<any>(null);
   const [metric, setMetric] = useState('glucose');
+  const [stats, setStats] = useState<any>(null);
   const [records, setRecords] = useState<any[]>([]);
   useEffect(() => { api(`/api/pharmacy/customers/${id}`).then(setHead).catch(() => setHead({ forbidden: true })); }, [id]);
-  useEffect(() => { if (id) api(`/api/pharmacy/customers/${id}/records?metric=${metric}`).then((d) => setRecords(d.items)).catch(() => setRecords([])); }, [id, metric]);
+  useEffect(() => {
+    if (!id) return;
+    Promise.all([
+      api(`/api/pharmacy/customers/${id}/records?metric=${metric}`),
+      api(`/api/pharmacy/customers/${id}/stats?metric=${metric}&range=30`)
+    ])
+      .then(([recordData, statsData]) => {
+        setRecords(recordData.items);
+        setStats(statsData);
+      })
+      .catch(() => {
+        setRecords([]);
+        setStats(null);
+      });
+  }, [id, metric]);
   if (head?.forbidden) return <div className="bcard" style={{ textAlign: 'center', padding: 46 }}>无权查看该客户(可能已解绑)</div>;
-  return <><button className="bbtn sm line" onClick={() => setView('customers')}>‹ 返回列表</button>{head && <div className="bcard"><span className="avatar-s">{head.nickname?.[0]}</span><b>{head.nickname}</b><span className="admin-note"> · 绑定于 {head.boundAt?.slice(0,10)}</span></div>}<div className="itab">{['glucose','bp','lipid','uric'].map((m) => <button key={m} className={metric === m ? 'on' : ''} onClick={() => setMetric(m)}>{m}</button>)}</div><div className="bcard"><table className="btab"><tbody>{records.map((r) => <tr key={r.id}><td>{r.measuredAt.slice(0,16).replace('T',' ')}</td><td className="num" style={{ color: dotColor(r.status.key), fontWeight: 700 }}>{readRecord(r)}</td><td><span className="pill ok">{r.status.label}</span></td><td>{r.note || '—'}</td></tr>)}</tbody></table><div className="bfoot">以上数据由客户本人记录并授权查看，仅供健康管理参考，不构成诊疗依据；请勿据此指导用药，医疗问题请建议客户及时就医</div></div></>;
+  return <><button className="bbtn sm line" onClick={() => setView('customers')}>‹ 返回列表</button>{head && <div className="bcard"><span className="avatar-s">{head.nickname?.[0]}</span><b>{head.nickname}</b><span className="admin-note"> · 绑定于 {head.boundAt?.slice(0,10)}</span>{head.pendingAlerts > 0 && <span className="alertbar">近 7 天 {head.pendingAlerts} 条异常读数待跟进</span>}</div>}<div className="itab">{metricTabs.map(([k, n]) => <button key={k} className={metric === k ? 'on' : ''} onClick={() => setMetric(k)}>{n}</button>)}</div><StatsPanel metric={metric} stats={stats} records={records} /><div className="bcard"><div className="bh"><span className="t">记录明细</span><span className="more">只读</span></div><table className="btab"><tbody>{records.map((r) => <tr key={r.id}><td>{r.measuredAt.slice(0,16).replace('T',' ')}</td><td className="num" style={{ color: dotColor(r.status.key), fontWeight: 700 }}>{readRecord(r)}</td><td><span className={`pill ${r.status.key === 'ok' ? 'ok' : r.status.key === 'hi' ? 'hi' : 'danger'}`}>{r.status.label}</span></td><td>{r.note || '—'}</td></tr>)}</tbody></table><div className="bfoot">以上数据由客户本人记录并授权查看，仅供健康管理参考，不构成诊疗依据；请勿据此指导用药，医疗问题请建议客户及时就医</div></div></>;
 }
 
 function readRecord(r: any) { if (r.metric === 'bp') return `${r.sbp}/${r.dbp}`; if (r.metric === 'uric') return r.value; if (r.metric === 'lipid') return ['tc','tg','ldl','hdl'].map((k) => r[k] ?? '—').join(' / '); return r.displayValue; }
+
+const metricTabs = [['glucose', '血糖'], ['bp', '血压'], ['lipid', '血脂'], ['uric', '尿酸']] as const;
+
+function StatsPanel({ metric, stats, records }: any) {
+  if (!stats) return <div className="bcard"><div className="empty">暂无统计数据</div></div>;
+  return (
+    <div className="bcard">
+      <div className="bh"><span className="t">趋势与概览</span><span className="more">复用同一序列口径</span></div>
+      <div className="console-metrics">{metricSummary(metric, stats).map(([k, v]) => <div className="metric" key={k}><div className="k">{k}</div><div className="v num">{v}</div></div>)}</div>
+      <ConsoleTrend metric={metric} records={records} />
+    </div>
+  );
+}
+
+function metricSummary(metric: string, stats: any) {
+  if (metric === 'glucose') return [['平均血糖', stats.avg?.toFixed?.(1) ?? '-'], ['达标率', `${Math.round((stats.okRate || 0) * 100)}%`], ['最高', stats.max ?? '-'], ['最低', stats.min ?? '-']];
+  if (metric === 'bp') return [['平均收缩压', `${stats.avgSbp || 0}`], ['平均舒张压', `${stats.avgDbp || 0}`], ['达标率', `${Math.round((stats.okRate || 0) * 100)}%`], ['平均脉搏', `${stats.avgPulse || 0}`]];
+  if (metric === 'lipid') return [['化验次数', `${stats.n || 0}`], ['最近 TC', stats.latest?.tc ?? '-'], ['最近 LDL-C', stats.latest?.ldl ?? '-'], ['整体状态', stats.latest?.status?.label ?? '-']];
+  return [['最近一次', stats.latest?.value ?? '-'], ['平均', stats.avg ?? '-'], ['达标率', `${Math.round((stats.okRate || 0) * 100)}%`], ['参考上限', stats.threshold ?? '-']];
+}
+
+function ConsoleTrend({ metric, records }: any) {
+  const points = records.slice().reverse().slice(-18);
+  if (!points.length) return <div className="empty">暂无趋势数据</div>;
+  return <div className="console-trend">{points.map((r: any) => {
+    const value = metric === 'bp' ? r.sbp : metric === 'uric' ? r.value : metric === 'lipid' ? (r.ldl ?? r.tc ?? r.tg ?? r.hdl ?? 0) : r.valueMmol;
+    const h = Math.max(12, Math.min(118, Number(value) * (metric === 'bp' ? .55 : metric === 'uric' ? .18 : metric === 'lipid' ? 22 : 9)));
+    return <span key={r.id} title={readRecord(r)} style={{ height: h, background: dotColor(r.status.key) }} />;
+  })}</div>;
+}
 
 function Alerts({ showToast }: any) {
   const [items, setItems] = useState<any[]>([]);
@@ -153,8 +198,21 @@ function Invites({ showToast }: any) {
 
 function Staff({ showToast }: any) {
   const [items, setItems] = useState<any[]>([]);
-  useEffect(() => { api('/api/pharmacy/staff').then((d) => setItems(d.items)); }, []);
-  return <div className="bcard"><table className="btab"><tbody>{items.map((s) => <tr key={s.id}><td>{s.name}</td><td>{s.username}</td><td>{s.role}</td><td><span className="pill ok">在职</span></td></tr>)}</tbody></table></div>;
+  const [form, setForm] = useState({ username: '', name: '', password: '', role: 'staff' });
+  const load = () => api('/api/pharmacy/staff').then((d) => setItems(d.items));
+  useEffect(() => { void load(); }, []);
+  async function create() {
+    await api('/api/pharmacy/staff', { method: 'POST', body: JSON.stringify(form) });
+    showToast('已新增员工');
+    setForm({ username: '', name: '', password: '', role: 'staff' });
+    load();
+  }
+  async function toggle(s: any) {
+    await api(`/api/pharmacy/staff/${s.id}`, { method: 'PATCH', body: JSON.stringify({ disabledAt: s.disabledAt ? null : new Date().toISOString() }) });
+    showToast(s.disabledAt ? '已启用员工' : '已停用员工');
+    load();
+  }
+  return <><div className="bcard"><div className="bh"><span className="t">新增员工</span></div><div className="staff-form"><input className="bsearch" placeholder="用户名" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /><input className="bsearch" placeholder="姓名" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input className="bsearch" placeholder="初始密码 ≥8 位" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /><select className="bsearch" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="staff">店员</option><option value="owner">店长</option></select><button className="bbtn" onClick={create}>新增员工</button></div></div><div className="bcard"><table className="btab"><thead><tr><th>姓名</th><th>用户名</th><th>角色</th><th>状态</th><th></th></tr></thead><tbody>{items.map((s) => <tr key={s.id}><td>{s.name}</td><td>{s.username}</td><td>{s.role === 'owner' ? '店长' : '店员'}</td><td>{s.disabledAt ? <span className="pill danger">停用</span> : <span className="pill ok">在职</span>}</td><td><button className="bbtn sm line" onClick={() => toggle(s)}>{s.disabledAt ? '启用' : '停用'}</button></td></tr>)}</tbody></table></div></>;
 }
 
 function Settings({ showToast }: any) {

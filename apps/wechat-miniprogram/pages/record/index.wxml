@@ -1,0 +1,96 @@
+<view class="app-stage">
+  <view class="screen">
+    <view class="safe-navbar" style="{{navStyle}}">
+      <view class="title">记一笔</view>
+    </view>
+
+    <view class="pages">
+      <view class="page on">
+        <view class="empty">用下方同款录入面板记录血糖、血压、血脂、尿酸。</view>
+      </view>
+    </view>
+
+    <view class="mask {{maskOn}}" bindtap="closeSheet"></view>
+    <view class="sheet {{sheetOn}}">
+      <view class="sheet-h"><text class="t">记一笔</text><button class="x" bindtap="closeSheet">×</button></view>
+      <view class="sheet-body">
+        <view class="msg">
+          <button wx:for="{{metrics}}" wx:key="key" class="{{item.className}}" data-metric="{{item.key}}" bindtap="setMetric">{{item.name}}</button>
+        </view>
+        <view class="time-row">
+          <picker mode="date" value="{{dateValue}}" bindchange="onInput" data-key="dateValue"><text>{{dateValue}}</text></picker>
+          <picker mode="time" value="{{timeValue}}" bindchange="onInput" data-key="timeValue"><text>{{timeValue}}</text></picker>
+        </view>
+
+        <block wx:if="{{isBp}}">
+          <view class="bp-fields">
+            <view class="bpf {{sbpAct}}" data-field="sbp" bindtap="selectBpField"><view class="fl">收缩压</view><view class="fv num">{{sbp}}<text wx:if="{{sbpCursor}}" class="cursor"></text></view><view class="fu">mmHg</view></view>
+            <view class="bpf {{dbpAct}}" data-field="dbp" bindtap="selectBpField"><view class="fl">舒张压</view><view class="fv num">{{dbp}}<text wx:if="{{dbpCursor}}" class="cursor"></text></view><view class="fu">mmHg</view></view>
+            <view class="bpf {{pulseAct}}" data-field="pulse" bindtap="selectBpField"><view class="fl">脉搏 · 选填</view><view class="fv num">{{pulse}}<text wx:if="{{pulseCursor}}" class="cursor"></text></view><view class="fu">次/分</view></view>
+          </view>
+          <view class="live-status" style="{{live.style}}">{{live.text}}</view>
+          <view class="f-label">测量时段 <text class="hint">已按当前时间推荐</text></view>
+          <view class="pgrid"><button wx:for="{{bpPeriods}}" wx:key="key" class="chip {{item.className}}" data-period="{{item.key}}" bindtap="setPeriod">{{item.name}}</button></view>
+          <view class="f-label">情景标签（选填）</view>
+          <view class="tagrow"><button wx:for="{{bpTags}}" wx:key="name" class="chip {{item.className}}" data-tag="{{item.name}}" bindtap="toggleTag">{{item.name}}</button></view>
+        </block>
+
+        <block wx:elif="{{isLipid}}">
+          <view class="lp-rows">
+            <view wx:for="{{lipidItems}}" wx:key="key" class="lp-row">
+              <view class="ln">{{item.name}}<text class="sub">{{item.abbr}} · 参考 {{item.ref}} mmol/L</text></view>
+              <input type="digit" value="{{item.value}}" data-key="{{item.key}}" bindinput="onLipidInput" />
+              <view class="dot" style="{{item.dotStyle}}"></view>
+            </view>
+          </view>
+          <view class="fast-row"><text>空腹采血</text><button class="switch {{lipidFastingClass}}" bindtap="toggleLipidFasting"></button></view>
+          <view class="live-status" style="{{live.style}}">{{live.text}}</view>
+        </block>
+
+        <block wx:else>
+          <view class="bignum"><text class="bv num" style="{{live.style}}">{{value}}</text><text class="cursor"></text><text class="bu">{{unitText}}</text></view>
+          <view class="live-status" style="{{live.style}}">{{live.text}}</view>
+          <block wx:if="{{isGlucose}}">
+            <view class="f-label">测量时段 <text class="hint">已按当前时间推荐</text></view>
+            <view class="pgrid"><button wx:for="{{glucosePeriods}}" wx:key="key" class="chip {{item.className}}" data-period="{{item.key}}" bindtap="setPeriod">{{item.name}}</button></view>
+            <view class="f-label">情景标签（选填）</view>
+            <view class="tagrow"><button wx:for="{{glucoseTags}}" wx:key="name" class="chip {{item.className}}" data-tag="{{item.name}}" bindtap="toggleTag">{{item.name}}</button></view>
+          </block>
+          <block wx:if="{{isUric}}">
+            <view class="fast-row"><text>空腹采血</text><button class="switch {{fastingClass}}" bindtap="toggleFasting"></button></view>
+          </block>
+        </block>
+
+        <view class="f-label">备注（选填）</view>
+        <input class="note-in" maxlength="50" value="{{note}}" data-key="note" bindinput="onInput" />
+      </view>
+
+      <view wx:if="{{!isLipid}}" class="keypad">
+        <button class="key" data-key="1" bindtap="pressKey">1</button>
+        <button class="key" data-key="2" bindtap="pressKey">2</button>
+        <button class="key" data-key="3" bindtap="pressKey">3</button>
+        <button class="key save" data-key="save" bindtap="pressKey">保存记录</button>
+        <button class="key" data-key="4" bindtap="pressKey">4</button>
+        <button class="key" data-key="5" bindtap="pressKey">5</button>
+        <button class="key" data-key="6" bindtap="pressKey">6</button>
+        <button class="key" data-key="7" bindtap="pressKey">7</button>
+        <button class="key" data-key="8" bindtap="pressKey">8</button>
+        <button class="key" data-key="9" bindtap="pressKey">9</button>
+        <button class="key fn" data-key="." bindtap="pressKey">{{dotKeyText}}</button>
+        <button class="key" data-key="0" bindtap="pressKey">0</button>
+        <button class="key fn" data-key="del" bindtap="pressKey">⌫</button>
+      </view>
+      <view wx:else class="lipid-save"><button class="btn primary" bindtap="save">保存记录</button></view>
+    </view>
+
+    <view class="toast {{toastOn}}">{{toast}}</view>
+
+    <view class="tabbar">
+      <button class="tab" data-tab="home" bindtap="switchPage"><text class="ti">⌂</text><text>首页</text></button>
+      <button class="tab" data-tab="history" bindtap="switchPage"><text class="ti">☰</text><text>历史</text></button>
+      <view class="fab-slot"><button class="fab" data-tab="record" bindtap="switchPage"><view class="drop"></view></button><text class="fab-label">记一笔</text></view>
+      <button class="tab" data-tab="stats" bindtap="switchPage"><text class="ti">↗</text><text>统计</text></button>
+      <button class="tab" data-tab="mine" bindtap="switchPage"><text class="ti">◯</text><text>我的</text></button>
+    </view>
+  </view>
+</view>

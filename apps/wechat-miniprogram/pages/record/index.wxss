@@ -1,0 +1,6 @@
+.lipid-save {
+  flex: none;
+  padding: 18rpx 18rpx 28rpx;
+  border-radius: 44rpx 44rpx 0 0;
+  background: #EBF0ED;
+}

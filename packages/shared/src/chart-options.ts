@@ -16,11 +16,11 @@ const FONT =
   '-apple-system,BlinkMacSystemFont,"PingFang SC","MiSans","HarmonyOS Sans SC","Noto Sans SC","Microsoft YaHei",sans-serif';
 
 const STATUS_COLOR: Record<StatusKey, string> = {
-  dlow: '#D6453D',
-  lo: '#4A7DDB',
-  ok: '#19A77E',
-  hi: '#E8833A',
-  dhigh: '#D6453D'
+  dlow: 'var(--danger)',
+  lo: 'var(--lo)',
+  ok: 'var(--ok)',
+  hi: 'var(--hi)',
+  dhigh: 'var(--danger)'
 };
 
 function baseOption() {
@@ -30,14 +30,14 @@ function baseOption() {
     grid: { left: 6, right: 10, top: 16, bottom: 4, containLabel: true },
     xAxis: {
       type: 'time',
-      axisLabel: { fontSize: 9.5, color: '#8C9C96' },
-      axisLine: { lineStyle: { color: '#E4EAE7' } }
+      axisLabel: { fontSize: 9.5, color: 'var(--ink-3)' },
+      axisLine: { lineStyle: { color: 'var(--line)' } }
     },
     yAxis: {
       type: 'value',
       scale: true,
-      axisLabel: { fontSize: 10, color: '#8C9C96' },
-      splitLine: { lineStyle: { color: '#ECF1EE' } },
+      axisLabel: { fontSize: 10, color: 'var(--ink-3)' },
+      splitLine: { lineStyle: { color: 'var(--line)' } },
       axisLine: { show: false },
       axisTick: { show: false }
     }
@@ -52,14 +52,14 @@ export function buildGlucoseTrendOption(points: SeriesPoint[], target = { fastin
         type: 'line',
         smooth: 0.25,
         symbolSize: 7,
-        lineStyle: { width: 2, color: '#0E7E6B' },
+        lineStyle: { width: 2, color: 'var(--m-glucose)' },
         data: points.map((point) => ({
           value: [new Date(point.t).getTime(), point.v],
-          itemStyle: { color: point.status ? STATUS_COLOR[point.status] : '#19A77E' }
+          itemStyle: { color: point.status ? STATUS_COLOR[point.status] : 'var(--ok)' }
         })),
         markArea: {
           silent: true,
-          itemStyle: { color: 'rgba(25,167,126,.09)' },
+          itemStyle: { color: 'var(--ok-soft)' },
           data: [[{ yAxis: target.fastingLow }, { yAxis: target.postMealHigh }]]
         }
       }
@@ -76,7 +76,7 @@ export function buildBpTrendOption(points: SeriesPoint[]) {
         type: 'line',
         smooth: 0.25,
         symbolSize: 7,
-        lineStyle: { width: 2, color: '#3E63C9' },
+        lineStyle: { width: 2, color: 'var(--m-bp)' },
         data: points.map((point) => [new Date(point.t).getTime(), point.sbp])
       },
       {
@@ -84,12 +84,12 @@ export function buildBpTrendOption(points: SeriesPoint[]) {
         type: 'line',
         smooth: 0.25,
         symbolSize: 6,
-        lineStyle: { width: 1.5, color: 'rgba(62,99,201,.6)' },
+        lineStyle: { width: 1.5, color: 'var(--m-bp)' },
         data: points.map((point) => [new Date(point.t).getTime(), point.dbp]),
         markLine: {
           silent: true,
           symbol: 'none',
-          lineStyle: { type: 'dashed', color: '#A9BAB3' },
+          lineStyle: { type: 'dashed', color: 'var(--ink-3)' },
           data: [{ yAxis: 135 }, { yAxis: 85 }]
         }
       }
@@ -99,14 +99,14 @@ export function buildBpTrendOption(points: SeriesPoint[]) {
 
 export function buildLipidTrendOption(points: SeriesPoint[]) {
   const series = [
-    ['TC', 'tc', '#C77B33'],
-    ['TG', 'tg', '#E0A260'],
-    ['LDL-C', 'ldl', '#8F5D24'],
-    ['HDL-C', 'hdl', '#0E7E6B']
+    ['TC', 'tc', 'var(--m-lipid)'],
+    ['TG', 'tg', 'var(--hi)'],
+    ['LDL-C', 'ldl', 'var(--m-lipid)'],
+    ['HDL-C', 'hdl', 'var(--m-glucose)']
   ] as const;
   return {
     ...baseOption(),
-    legend: { top: 0, textStyle: { fontSize: 10, color: '#7A8A85' } },
+    legend: { top: 0, textStyle: { fontSize: 10, color: 'var(--ink-3)' } },
     series: series.map(([name, key, color]) => ({
       name,
       type: 'line',
@@ -116,7 +116,7 @@ export function buildLipidTrendOption(points: SeriesPoint[]) {
       data: points.filter((point) => point[key] != null).map((point) => [new Date(point.t).getTime(), point[key]]),
       markLine:
         key === 'ldl'
-          ? { silent: true, symbol: 'none', lineStyle: { type: 'dashed', color: '#A9BAB3' }, data: [{ yAxis: 3.4 }] }
+          ? { silent: true, symbol: 'none', lineStyle: { type: 'dashed', color: 'var(--ink-3)' }, data: [{ yAxis: 3.4 }] }
           : undefined
     }))
   };
@@ -130,16 +130,16 @@ export function buildUricTrendOption(points: SeriesPoint[], threshold: number) {
         type: 'line',
         smooth: 0.25,
         symbolSize: 7,
-        lineStyle: { width: 2, color: '#7A5BBF' },
+        lineStyle: { width: 2, color: 'var(--m-uric)' },
         data: points.map((point) => ({
           value: [new Date(point.t).getTime(), point.v],
-          itemStyle: { color: point.status ? STATUS_COLOR[point.status] : '#7A5BBF' }
+          itemStyle: { color: point.status ? STATUS_COLOR[point.status] : 'var(--m-uric)' }
         })),
         markLine: {
           silent: true,
           symbol: 'none',
-          lineStyle: { type: 'dashed', color: '#A9BAB3' },
-          data: [{ yAxis: threshold }, { yAxis: 540, lineStyle: { color: '#D6453D', type: 'dashed' } }]
+          lineStyle: { type: 'dashed', color: 'var(--ink-3)' },
+          data: [{ yAxis: threshold }, { yAxis: 540, lineStyle: { color: 'var(--danger)', type: 'dashed' } }]
         }
       }
     ]

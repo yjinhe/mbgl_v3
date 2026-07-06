@@ -14,3 +14,6 @@ playwright-report/
 docs/screenshots/*.png
 docs/screenshots/*.jpg
 docs/screenshots/*.webp
+docs/conversation_history*.txt
+docs/慢病管理上下文V3.txt
+apps/wechat-miniprogram/project.private.config.json

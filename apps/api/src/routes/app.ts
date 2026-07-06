@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import archiver from 'archiver';
 import { z } from 'zod';
 import { config } from '../env.js';
 import { requireAuth, type AppToken } from '../plugins/auth.js';
@@ -89,16 +90,17 @@ export async function appRoutes(app: FastifyInstance) {
 
   app.get('/overview', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request) => {
     const user = await currentUser(app, request.auth as AppToken);
-    const [glucose, bp, lipid, uric, stats] = await Promise.all([
+    const [glucose, bp, lipid, uric, stats, todayCount] = await Promise.all([
       app.prisma.glucoseRecord.findFirst({ where: { userId: user.id, deletedAt: null }, orderBy: { measuredAt: 'desc' } }),
       app.prisma.bpRecord.findFirst({ where: { userId: user.id, deletedAt: null }, orderBy: { measuredAt: 'desc' } }),
       app.prisma.lipidRecord.findFirst({ where: { userId: user.id, deletedAt: null }, orderBy: { measuredAt: 'desc' } }),
       app.prisma.uricRecord.findFirst({ where: { userId: user.id, deletedAt: null }, orderBy: { measuredAt: 'desc' } }),
-      userStats(app.prisma, user.id)
+      userStats(app.prisma, user.id),
+      countTodayRecords(app, user.id)
     ]);
     return {
       streak: stats.streak,
-      todayCount: 0,
+      todayCount,
       glucose: { latest: glucose ? serializeRecord('glucose', glucose, user) : null },
       bp: { latest: bp ? serializeRecord('bp', bp, user) : null },
       lipid: { latest: lipid ? serializeRecord('lipid', lipid, user) : null },
@@ -203,15 +205,172 @@ export async function appRoutes(app: FastifyInstance) {
     return reply.code(204).send();
   });
 
-  app.get('/export/csv', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (_request, reply) => {
-    reply.header('content-type', 'text/csv;charset=utf-8');
-    return '\ufeff日期,时间,血糖(mmol/L),血糖(mg/dL),时段,标签,备注\n';
+  app.get('/report/weekly', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request) => {
+    const user = await currentUser(app, request.auth as AppToken);
+    return weeklyReport(app, user);
   });
+
+  app.get('/export/csv', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
+    const query = z.object({ metric: z.union([metricSchema, z.literal('all')]).default('glucose') }).parse(request.query);
+    const user = await currentUser(app, request.auth as AppToken);
+    const stamp = dateStamp(new Date());
+    if (query.metric === 'all') {
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      reply.header('content-type', 'application/zip');
+      reply.header('content-disposition', contentDisposition(`糖迹-健康记录-${stamp}.zip`));
+      for (const metric of METRICS) {
+        archive.append(await csvForMetric(app, metric, user), { name: `糖迹-${metricLabel(metric)}记录-${stamp}.csv` });
+      }
+      void archive.finalize();
+      return reply.send(archive);
+    }
+    reply.header('content-type', 'text/csv;charset=utf-8');
+    reply.header('content-disposition', contentDisposition(`糖迹-${metricLabel(query.metric)}记录-${stamp}.csv`));
+    return csvForMetric(app, query.metric, user);
+  });
+}
+
+async function weeklyReport(app: FastifyInstance, user: any) {
+  const rangeDays = 7;
+  const fromDate = new Date(Date.now() - (rangeDays - 1) * 86400000);
+  fromDate.setHours(0, 0, 0, 0);
+  const toDate = new Date();
+  const [glucose, bp, lipid, uric] = await Promise.all([
+    statsForMetric(app.prisma, user.id, user, 'glucose', rangeDays),
+    statsForMetric(app.prisma, user.id, user, 'bp', rangeDays),
+    weeklyLipidSection(app, user, fromDate),
+    statsForMetric(app.prisma, user.id, user, 'uric', rangeDays)
+  ]);
+  const sections: Record<string, unknown> = {};
+  if (glucose.n > 0) sections.glucose = glucose;
+  if (bp.n > 0) sections.bp = bp;
+  if (lipid.n > 0) sections.lipid = lipid;
+  if (uric.n > 0) sections.uric = uric;
+  return {
+    title: '近 7 天健康报告',
+    rangeDays,
+    from: fromDate.toISOString(),
+    to: toDate.toISOString(),
+    sections,
+    footnote: '各指标参考口径仅供健康记录与沟通参考，不构成诊疗依据。'
+  };
+}
+
+async function countTodayRecords(app: FastifyInstance, userId: string) {
+  const key = localDayKey(new Date());
+  const start = new Date(`${key}T00:00:00+08:00`);
+  const end = new Date(start.getTime() + 86400000);
+  const where = { userId, deletedAt: null, measuredAt: { gte: start, lt: end } };
+  const counts = await Promise.all([
+    app.prisma.glucoseRecord.count({ where }),
+    app.prisma.bpRecord.count({ where }),
+    app.prisma.lipidRecord.count({ where }),
+    app.prisma.uricRecord.count({ where })
+  ]);
+  return counts.reduce((sum, value) => sum + value, 0);
+}
+
+async function weeklyLipidSection(app: FastifyInstance, user: any, fromDate: Date) {
+  const records = await app.prisma.lipidRecord.findMany({
+    where: { userId: user.id, deletedAt: null, measuredAt: { gte: fromDate } },
+    orderBy: { measuredAt: 'asc' }
+  });
+  const items = records.map((record) => serializeRecord('lipid', record, user));
+  return { n: items.length, latest: items.at(-1) ?? null, series: items };
+}
+
+async function csvForMetric(app: FastifyInstance, metric: Metric, user: any) {
+  const rows = await csvRowsForMetric(app, metric, user);
+  return `\ufeff${rows.map((row) => row.map(csvCell).join(',')).join('\n')}\n`;
+}
+
+async function csvRowsForMetric(app: FastifyInstance, metric: Metric, user: any) {
+  const records = await findRecordsAsc(app, metric, { userId: user.id, deletedAt: null });
+  if (metric === 'glucose') {
+    return [
+      ['日期', '时间', '血糖(mmol/L)', '血糖(mg/dL)', '时段', '标签', '备注'],
+      ...records.map((record) => {
+        const item = serializeRecord(metric, record, user);
+        const [date, time] = localDateTime(item.measuredAt);
+        return [date, time, item.valueMmol.toFixed(1), Math.round(item.valueMmol * 18), item.periodName, item.tags.join('、'), sanitizeNote(item.note)];
+      })
+    ];
+  }
+  if (metric === 'bp') {
+    return [
+      ['日期', '时间', '收缩压(mmHg)', '舒张压(mmHg)', '脉搏', '时段', '状态', '备注'],
+      ...records.map((record) => {
+        const item = serializeRecord(metric, record, user);
+        const [date, time] = localDateTime(item.measuredAt);
+        return [date, time, item.sbp, item.dbp, item.pulse ?? '', item.periodName, item.status.label, sanitizeNote(item.note)];
+      })
+    ];
+  }
+  if (metric === 'lipid') {
+    return [
+      ['日期', '时间', '总胆固醇(mmol/L)', '甘油三酯(mmol/L)', '低密度脂蛋白(mmol/L)', '高密度脂蛋白(mmol/L)', '是否空腹', '备注'],
+      ...records.map((record) => {
+        const item = serializeRecord(metric, record, user);
+        const [date, time] = localDateTime(item.measuredAt);
+        return [date, time, item.tc ?? '', item.tg ?? '', item.ldl ?? '', item.hdl ?? '', item.fasting ? '是' : '否', sanitizeNote(item.note)];
+      })
+    ];
+  }
+  return [
+    ['日期', '时间', '尿酸(μmol/L)', '是否空腹', '备注'],
+    ...records.map((record) => {
+      const item = serializeRecord(metric, record, user);
+      const [date, time] = localDateTime(item.measuredAt);
+      return [date, time, item.value, item.fasting ? '是' : '否', sanitizeNote(item.note)];
+    })
+  ];
+}
+
+function csvCell(value: unknown) {
+  const text = String(value ?? '');
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function sanitizeNote(value: string) {
+  return String(value ?? '').replaceAll(',', '，');
+}
+
+function localDateTime(value: string | Date) {
+  const d = new Date(value);
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(d);
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return [`${part('year')}-${part('month')}-${part('day')}`, `${part('hour')}:${part('minute')}`];
+}
+
+function dateStamp(value: Date) {
+  const [date] = localDateTime(value);
+  return date.replaceAll('-', '');
+}
+
+function contentDisposition(filename: string) {
+  return `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+function metricLabel(metric: Metric) {
+  return ({ glucose: '血糖', bp: '血压', lipid: '血脂', uric: '尿酸' } as const)[metric];
 }
 
 async function findRecords(app: FastifyInstance, metric: Metric, where: any): Promise<any[]> {
   const model = modelFor(app, metric);
   return model.findMany({ where, orderBy: { measuredAt: 'desc' } });
+}
+
+async function findRecordsAsc(app: FastifyInstance, metric: Metric, where: any): Promise<any[]> {
+  const model = modelFor(app, metric);
+  return model.findMany({ where, orderBy: { measuredAt: 'asc' } });
 }
 
 async function findRecord(app: FastifyInstance, metric: Metric, id: string, userId: string, includeDeleted = false) {

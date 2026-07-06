@@ -14,3 +14,44 @@
   font-size: 11px;
   color: var(--ink-3);
 }
+
+.alertbar {
+  display: inline-flex;
+  margin-left: 12px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.console-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.console-trend {
+  height: 142px;
+  display: flex;
+  align-items: end;
+  gap: 5px;
+  padding: 13px 4px;
+  border-top: 1px solid var(--line);
+}
+
+.console-trend span {
+  flex: 1;
+  min-width: 6px;
+  border-radius: 7px 7px 2px 2px;
+  opacity: .82;
+}
+
+.staff-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 120px auto;
+  gap: 10px;
+  align-items: center;
+}
