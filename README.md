@@ -1,4 +1,4 @@
-# 糖迹 V2
+# 糖迹 V3
 
 慢病健康记录产品：C 端移动 Web、药房后台、Fastify + Prisma API。
 

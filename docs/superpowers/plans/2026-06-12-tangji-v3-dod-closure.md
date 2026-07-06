@@ -1,4 +1,4 @@
-# Tangji V2 DoD Closure Implementation Plan
+# Tangji V3 DoD Closure Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -132,6 +132,6 @@ Expected: PASS, except any external browser/runtime issue must be recorded in Kn
 
 - [ ] **Step 2: Commit**
 
-Run: `git status --short`, review changed files, then `git add ... && git commit -m "P7: close Tangji V2 DoD gaps"`.
+Run: `git status --short`, review changed files, then `git add ... && git commit -m "P7: close Tangji V3 DoD gaps"`.
 
 Expected: Clean worktree after commit.

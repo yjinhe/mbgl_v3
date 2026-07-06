@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>糖迹 V2 · 患者端 + 药房后台 双端高保真交互原型</title>
+<title>糖迹 V3 · 患者端 + 药房后台 双端高保真交互原型</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
 <style>
 /* ========== 设计令牌 ========== */
@@ -288,14 +288,14 @@ table.rp-tab tr:last-child td{border-bottom:none}
 .modal .m-acts button + button{border-left:1px solid var(--line);color:var(--brand)}
 .modal .m-acts button.warn{color:var(--danger)}
 
-/* ========== V2 追加:指标识别色 ========== */
+/* ========== V3 追加:指标识别色 ========== */
 :root{
   --m-glucose:#0E7E6B; --m-glucose-soft:#E2F1EC;
   --m-bp:#3E63C9;      --m-bp-soft:#E8EDFA;
   --m-lipid:#C77B33;   --m-lipid-soft:#FAF0E3;
   --m-uric:#7A5BBF;    --m-uric-soft:#F0EAFA;
 }
-/* ========== V2 追加:双端舞台与切换器 ========== */
+/* ========== V3 追加:双端舞台与切换器 ========== */
 .stage{flex-wrap:wrap;align-content:center}
 .duo-switch{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:200;display:flex;background:rgba(11,23,20,.78);border:1px solid rgba(91,201,166,.25);border-radius:999px;padding:4px;backdrop-filter:blur(8px)}
 .duo-switch button{padding:7px 17px;border-radius:999px;font-size:12.5px;color:#9DB8AF;font-weight:500;display:flex;align-items:center;gap:6px}
@@ -303,7 +303,7 @@ table.rp-tab tr:last-child td{border-bottom:none}
 .pane-c,.pane-b{transition:opacity .2s}
 .pane-hide{display:none!important}
 .pane-label{text-align:center;font-size:11px;letter-spacing:.3em;color:#5E8678;margin-bottom:12px}
-/* ========== V2 追加:首页指标卡 ========== */
+/* ========== V3 追加:首页指标卡 ========== */
 .mcard{background:#fff;border-radius:18px;padding:14px 16px;box-shadow:var(--shadow-card);margin-bottom:12px;cursor:pointer;transition:transform .12s}
 .mcard:active{transform:scale(.985)}
 .mcard .brow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-3);margin-bottom:9px}
@@ -317,7 +317,7 @@ table.rp-tab tr:last-child td{border-bottom:none}
 .lgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px 14px;margin-top:2px}
 .lgrid .li{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--ink-3)}
 .lgrid .li b{font-size:15.5px;font-weight:700}
-/* ========== V2 追加:录入弹层多指标 ========== */
+/* ========== V3 追加:录入弹层多指标 ========== */
 .msg{display:flex;background:#E8EEEB;border-radius:11px;padding:3px;margin:2px 0 6px}
 .msg button{flex:1;padding:7px 0;border-radius:9px;font-size:12.5px;color:var(--ink-3);font-weight:500;display:flex;align-items:center;justify-content:center;gap:5px}
 .msg button.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 4px rgba(22,48,43,.12)}
@@ -335,7 +335,7 @@ table.rp-tab tr:last-child td{border-bottom:none}
 .lp-row input{flex:1;font-size:17px;font-weight:700;text-align:right}
 .lp-row .dot{width:9px;height:9px;border-radius:50%;background:#D5DDD9;flex:none}
 .fast-row{display:flex;align-items:center;justify-content:space-between;padding:10px 2px 2px;font-size:13px;color:var(--ink-2)}
-/* ========== V2 追加:绑定子页 / 通用 ========== */
+/* ========== V3 追加:绑定子页 / 通用 ========== */
 .code-in{display:flex;gap:9px;margin:10px 0 14px}
 .code-in input{flex:1;background:#fff;border:1px solid var(--line);border-radius:13px;padding:13px 15px;font-size:17px;font-weight:700;letter-spacing:.25em;text-transform:uppercase}
 .code-in button{padding:0 19px;border-radius:13px;background:var(--ink);color:#fff;font-size:13.5px;font-weight:600}
@@ -346,7 +346,7 @@ table.rp-tab tr:last-child td{border-bottom:none}
 .bound-cell .bi{flex:1}
 .bound-cell .bn{font-size:14px;font-weight:700;color:var(--brand-deep)}
 .bound-cell .bs{font-size:11px;color:var(--ink-3);margin-top:3px;line-height:1.5}
-/* ========== V2 追加:B 端桌面后台 ========== */
+/* ========== V3 追加:B 端桌面后台 ========== */
 .bshell{width:min(1120px,calc(100vw - 28px));height:844px;border-radius:22px;overflow:hidden;background:var(--paper);box-shadow:0 30px 80px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.05);display:flex;position:relative}
 .bside{width:208px;flex:none;background:var(--ink);display:flex;flex-direction:column;color:#9DB8AF}
 .bside .blogo{display:flex;align-items:center;gap:8px;padding:20px 18px 16px;color:#EFF8F4;font-size:13.5px;font-weight:700}
@@ -968,7 +968,7 @@ function renderMine(){
   <div class="sec-label">关于</div>
   <div class="card" style="padding:4px 16px">
    <div class="cell" data-act="disclaim" style="cursor:pointer"><div class="cm"><div class="ct">免责声明</div></div>${chev}</div>
-   <div class="cell"><div class="cm"><div class="ct">版本</div></div><span class="cv num">双端原型 v2.0</span></div></div>
+   <div class="cell"><div class="cm"><div class="ct">版本</div></div><span class="cv num">双端原型 v3.0</span></div></div>
   <div class="foot-note">糖迹仅作记录工具，不提供诊断与用药建议，请遵医嘱</div>`;
 }
 

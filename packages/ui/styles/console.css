@@ -1,4 +1,4 @@
-/* ========== V2 追加:B 端桌面后台 ========== */
+/* ========== V3 追加:B 端桌面后台 ========== */
 .bshell{width:min(1120px,calc(100vw - 28px));height:844px;border-radius:22px;overflow:hidden;background:var(--paper);box-shadow:0 30px 80px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.05);display:flex;position:relative}
 .bside{width:208px;flex:none;background:var(--ink);display:flex;flex-direction:column;color:#9DB8AF}
 .bside .blogo{display:flex;align-items:center;gap:8px;padding:20px 18px 16px;color:#EFF8F4;font-size:13.5px;font-weight:700}

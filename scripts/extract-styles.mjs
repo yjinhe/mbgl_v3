@@ -28,15 +28,15 @@ if (!styleMatch) {
 const style = styleMatch[1].trim();
 const rootBlocks = [...style.matchAll(/:root\{[\s\S]*?\n\}/g)].map((m) => m[0]);
 if (rootBlocks.length < 2) {
-  throw new Error('Expected base and V2 :root blocks in prototype style');
+  throw new Error('Expected base and V3 :root blocks in prototype style');
 }
 
 const tokens = `${rootBlocks.join('\n')}\n`;
 const tokenSet = new Set(rootBlocks);
 const sections = style.split(/(?=\/\* ========== )/g);
 const baseNames = ['设计令牌', '舞台与说明'];
-const consoleNames = ['V2 追加:B 端桌面后台'];
-const skipNames = ['V2 追加:双端舞台与切换器'];
+const consoleNames = ['V3 追加:B 端桌面后台'];
+const skipNames = ['V3 追加:双端舞台与切换器'];
 
 function titleOf(section) {
   return section.match(/^\/\* ========== ([\s\S]*?) ========== \*\//)?.[1]?.trim() ?? '';
