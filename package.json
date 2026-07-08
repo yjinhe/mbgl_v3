@@ -10,7 +10,15 @@
     "test": "pnpm -r test",
     "e2e": "playwright test",
     "style:extract": "node scripts/extract-styles.mjs",
-    "seed": "pnpm --filter @tangji/api seed"
+    "seed": "pnpm --filter @tangji/api seed",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:api:build": "docker compose -f docker-compose.api.yml build",
+    "docker:api:up": "docker compose -f docker-compose.api.yml up -d",
+    "docker:api:down": "docker compose -f docker-compose.api.yml down",
+    "docker:api:logs": "docker compose -f docker-compose.api.yml logs -f tangji-api"
   },
   "devDependencies": {
     "@playwright/test": "^1.46.1",

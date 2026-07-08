@@ -27,6 +27,11 @@ pnpm dev
 
 原生小程序工程在 `apps/wechat-miniprogram`，用微信开发者工具导入该目录即可。默认 API 地址为 `http://127.0.0.1:3001`；真机预览时请在 `apps/wechat-miniprogram/app.js` 改成电脑局域网 IP，并在开发者工具中关闭合法域名校验。详细说明见 `apps/wechat-miniprogram/README.md`。
 
+## Docker 部署
+
+- 只部署 API：见 `docs/DOCKER-API-DEPLOY.md`
+- 统一部署 API + C 端 Web + 药房后台：见 `docs/DOCKER-FULL-DEPLOY.md`
+
 ## 3 分钟演示路径
 
 1. 打开 C 端，登录，查看首页四指标。

@@ -1,4 +1,4 @@
-let apiBase = 'http://192.168.66.8:3001';
+let apiBase = 'https://tangji.aiteam.pw';
 
 const TOKEN_KEY = 'tangji_app_token';
 
@@ -48,6 +48,9 @@ function loginWithWechat() {
     wx.login({
       success: async (loginRes) => {
         try {
+          if (!loginRes.code) {
+            throw new Error(loginRes.errMsg || 'wx.login 未返回 code');
+          }
           const code = loginRes.code || 'seed_demo';
           const data = await request('/api/app/auth/wechat', {
             method: 'POST',

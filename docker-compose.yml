@@ -1,0 +1,49 @@
+services:
+  tangji-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: tangji-api:latest
+    container_name: tangji-api
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: file:/data/prod.db
+    expose:
+      - "3001"
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - tangji_api_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  tangji-frontends:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: tangji-frontends:latest
+    container_name: tangji-frontends
+    restart: unless-stopped
+    depends_on:
+      tangji-api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5173:80"
+      - "127.0.0.1:5174:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null && wget -qO- http://127.0.0.1:8080/ >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  tangji_api_data:

@@ -10,7 +10,7 @@ function safeWxCall(fn, fallback) {
 
 App({
   globalData: {
-    apiBase: 'http://192.168.66.8:3001',
+    apiBase: 'https://tangji.aiteam.pw',
     me: null,
     navStyle: ''
   },

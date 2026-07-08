@@ -103,7 +103,7 @@ describe('wechat miniprogram structure', () => {
   test('uses a LAN API host so device preview can reach the dev backend', () => {
     const appJs = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 
-    expect(appJs).toContain("apiBase: 'http://192.168.66.8:3001'");
+    expect(appJs).toContain("apiBase: 'https://tangji.aiteam.pw'");
     expect(appJs).not.toContain("apiBase: 'http://127.0.0.1:3001'");
   });
 });

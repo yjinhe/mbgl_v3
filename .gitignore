@@ -2,9 +2,12 @@ node_modules/
 .DS_Store
 dist/
 coverage/
+.trae-html-share-packages/
+tangji-v3-latest-report/
 .env
 .env.*
 !.env.example
+!.env.docker.example
 *.db
 *.db-journal
 *.sqlite
