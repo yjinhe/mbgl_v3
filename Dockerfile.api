@@ -6,7 +6,7 @@ ENV PATH="$PNPM_HOME:$PATH"
 WORKDIR /app
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && apt-get install -y --no-install-recommends openssl ca-certificates gosu \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable \
   && corepack prepare pnpm@10.33.1 --activate
@@ -22,13 +22,14 @@ COPY apps/api apps/api
 COPY docker/api-entrypoint.sh docker/api-entrypoint.sh
 
 RUN pnpm --filter @tangji/shared build \
-  && pnpm --filter @tangji/api prisma:generate \
+  && pnpm --filter @tangji/api build \
   && chmod +x docker/api-entrypoint.sh \
-  && mkdir -p /data
+  && mkdir -p /data \
+  && chown -R node:node /app /data
 
 EXPOSE 3001
 
 VOLUME ["/data"]
 
 ENTRYPOINT ["/app/docker/api-entrypoint.sh"]
-CMD ["pnpm", "--filter", "@tangji/api", "exec", "tsx", "src/server.ts"]
+CMD ["node", "apps/api/dist/src/server.js"]

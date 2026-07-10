@@ -69,7 +69,6 @@
         <button class="key" data-key="1" bindtap="pressKey">1</button>
         <button class="key" data-key="2" bindtap="pressKey">2</button>
         <button class="key" data-key="3" bindtap="pressKey">3</button>
-        <button class="key save" data-key="save" bindtap="pressKey">保存记录</button>
         <button class="key" data-key="4" bindtap="pressKey">4</button>
         <button class="key" data-key="5" bindtap="pressKey">5</button>
         <button class="key" data-key="6" bindtap="pressKey">6</button>
@@ -80,7 +79,7 @@
         <button class="key" data-key="0" bindtap="pressKey">0</button>
         <button class="key fn" data-key="del" bindtap="pressKey">⌫</button>
       </view>
-      <view wx:else class="lipid-save"><button class="btn primary" bindtap="save">保存记录</button></view>
+      <view class="record-actions"><button class="btn primary record-save" loading="{{saving}}" disabled="{{saving}}" bindtap="save">保存记录</button></view>
     </view>
 
     <view class="toast {{toastOn}}">{{toast}}</view>

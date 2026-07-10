@@ -126,11 +126,18 @@ export function serializeUric(record: any, sex: Sex) {
   };
 }
 
-export function serializeRecord(metric: Metric, record: any, user: any) {
-  if (metric === 'glucose') return serializeGlucose(record, user, user.unit);
-  if (metric === 'bp') return serializeBp(record);
-  if (metric === 'lipid') return serializeLipid(record);
-  return serializeUric(record, user.sex);
+type SerializedRecordMap = {
+  glucose: ReturnType<typeof serializeGlucose>;
+  bp: ReturnType<typeof serializeBp>;
+  lipid: ReturnType<typeof serializeLipid>;
+  uric: ReturnType<typeof serializeUric>;
+};
+
+export function serializeRecord<M extends Metric>(metric: M, record: any, user: any): SerializedRecordMap[M] {
+  if (metric === 'glucose') return serializeGlucose(record, user, user.unit) as SerializedRecordMap[M];
+  if (metric === 'bp') return serializeBp(record) as SerializedRecordMap[M];
+  if (metric === 'lipid') return serializeLipid(record) as SerializedRecordMap[M];
+  return serializeUric(record, user.sex) as SerializedRecordMap[M];
 }
 
 export function periodName(period: string): string {
@@ -230,7 +237,7 @@ export async function statsForMetric(prisma: PrismaClient, userId: string, user:
     };
   }
   if (metric === 'lipid') {
-    const records = await prisma.lipidRecord.findMany({ where: { userId, deletedAt: null }, orderBy: { measuredAt: 'asc' } });
+    const records = await prisma.lipidRecord.findMany({ where: { userId, deletedAt: null, measuredAt: { gte: since } }, orderBy: { measuredAt: 'asc' } });
     return { n: records.length, latest: records.length ? serializeLipid(records.at(-1)) : null, series: records.map(serializeLipid) };
   }
   const records = await prisma.uricRecord.findMany({ where: { userId, deletedAt: null, measuredAt: { gte: since } }, orderBy: { measuredAt: 'asc' } });

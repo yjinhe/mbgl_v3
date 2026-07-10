@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import html2canvas from 'html2canvas';
 import {
   GLUCOSE_PERIOD_MAP,
   bpStatus,
@@ -86,6 +85,7 @@ async function api(path: string, init: RequestInit = {}) {
   const token = getToken();
   if (token) headers.set('authorization', `Bearer ${token}`);
   const res = await fetch(`${API}${path}`, { ...init, headers });
+  if (res.status === 401) localStorage.removeItem('tangji_app_token');
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error?.message || res.statusText);
   if (res.status === 204) return null;
   return res.json();
@@ -222,10 +222,10 @@ function App() {
     const [meData, ov, g, b, l, u] = await Promise.all([
       api('/api/app/me'),
       api('/api/app/overview'),
-      api('/api/app/records/glucose'),
-      api('/api/app/records/bp'),
-      api('/api/app/records/lipid'),
-      api('/api/app/records/uric')
+      api('/api/app/records/glucose?limit=200'),
+      api('/api/app/records/bp?limit=200'),
+      api('/api/app/records/lipid?limit=200'),
+      api('/api/app/records/uric?limit=200')
     ]);
     setMe(meData);
     setOverview(ov);
@@ -516,6 +516,7 @@ function ReportSub({ close, showToast, openExport }: any) {
   async function saveImage() {
     const node = document.getElementById('reportCard');
     if (!node) return;
+    const { default: html2canvas } = await import('html2canvas');
     const canvas = await html2canvas(node, { backgroundColor: cssVar('--paper'), scale: 2 });
     const a = document.createElement('a');
     a.href = canvas.toDataURL('image/png');

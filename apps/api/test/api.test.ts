@@ -7,6 +7,8 @@ import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { buildApp } from '../src/app.js';
 import { hashPassword } from '../src/services/password.js';
+import { purgeExpiredRecords } from '../src/services/recycle.js';
+import { exchangeWechatCode, WechatLoginError } from '../src/services/wechat.js';
 import { createSqliteSchema } from './setup-db.js';
 
 let app: Awaited<ReturnType<typeof buildApp>>;
@@ -21,6 +23,7 @@ let otherUserId = '';
 let pharmacyId = '';
 let otherPharmacyId = '';
 let staffId = '';
+let otherOwnerId = '';
 
 async function loginApp(code = 'seed') {
   const res = await request(app.server).post('/api/app/auth/wechat').send({ code }).expect(200);
@@ -55,6 +58,7 @@ beforeAll(async () => {
   const otherOwner = await prisma.pharmacyStaff.create({
     data: { pharmacyId: otherPharmacy.id, username: 'baixingyuan', passwordHash: await hashPassword('Bxy@123456'), name: '赵敏', role: 'owner' }
   });
+  otherOwnerId = otherOwner.id;
   staffId = staff.id;
   await prisma.adminUser.create({ data: { username: 'admin', passwordHash: await hashPassword('Admin@123456') } });
   const invite = await prisma.inviteCode.create({
@@ -83,6 +87,12 @@ afterAll(async () => {
 });
 
 describe('app records', () => {
+  test('maps malformed input to a validation response', async () => {
+    const response = await request(app.server).post('/api/pharmacy/auth/login').send({}).expect(422);
+    expect(response.body.error.code).toBe('VALIDATION_FAILED');
+    expect(response.body.error.message).toBe('请求参数不正确');
+  });
+
   test('rejects missing token and invalid glucose without inserting', async () => {
     await request(app.server).get('/api/app/me').expect(401);
     const before = await prisma.glucoseRecord.count({ where: { userId } });
@@ -135,6 +145,64 @@ describe('app records', () => {
     const recycle = await request(app.server).get('/api/app/records/recycle-bin').set('Authorization', `Bearer ${appToken}`).expect(200);
     expect(recycle.body.items.some((item: any) => item.id === id)).toBe(true);
     await request(app.server).post(`/api/app/records/glucose/${id}/restore`).set('Authorization', `Bearer ${appToken}`).expect(200);
+  });
+
+  test('hides expired recycle records and purges them permanently', async () => {
+    const visible = await prisma.bpRecord.create({
+      data: {
+        userId,
+        sbp: 130,
+        dbp: 82,
+        period: 'morning',
+        measuredAt: new Date(Date.now() - 3 * 86400000),
+        deletedAt: new Date(Date.now() - 2 * 86400000),
+        tags: '[]',
+        note: ''
+      }
+    });
+    const expired = await prisma.uricRecord.create({
+      data: {
+        userId,
+        value: 420,
+        fasting: true,
+        measuredAt: new Date(Date.now() - 10 * 86400000),
+        deletedAt: new Date(Date.now() - 8 * 86400000),
+        note: ''
+      }
+    });
+    const recycle = await request(app.server).get('/api/app/records/recycle-bin').set('Authorization', `Bearer ${appToken}`).expect(200);
+    expect(recycle.body.items.find((item: any) => item.id === visible.id)?.daysLeft).toBe(5);
+    expect(recycle.body.items.some((item: any) => item.id === expired.id)).toBe(false);
+    await request(app.server).post(`/api/app/records/uric/${expired.id}/restore`).set('Authorization', `Bearer ${appToken}`).expect(404);
+    expect((await purgeExpiredRecords(prisma)).deletedRecords).toBeGreaterThanOrEqual(1);
+    expect(await prisma.uricRecord.findUnique({ where: { id: expired.id } })).toBeNull();
+  });
+
+  test('paginates record history with a stable cursor', async () => {
+    for (const value of [401, 402, 403]) {
+      await prisma.uricRecord.create({ data: { userId, value, fasting: true, measuredAt: new Date(Date.now() - 10 * 86400000 + value), note: '' } });
+    }
+    const first = await request(app.server).get('/api/app/records/uric?limit=2').set('Authorization', `Bearer ${appToken}`).expect(200);
+    expect(first.body.items).toHaveLength(2);
+    expect(first.body.nextCursor).toBeTruthy();
+    const second = await request(app.server)
+      .get(`/api/app/records/uric?limit=2&cursor=${first.body.nextCursor}`)
+      .set('Authorization', `Bearer ${appToken}`)
+      .expect(200);
+    const firstIds = new Set(first.body.items.map((item: any) => item.id));
+    expect(second.body.items.every((item: any) => !firstIds.has(item.id))).toBe(true);
+  });
+
+  test('applies the requested range to lipid statistics', async () => {
+    const old = await prisma.lipidRecord.create({
+      data: { userId, tc: 6.2, fasting: true, measuredAt: new Date(Date.now() - 30 * 86400000), note: '' }
+    });
+    const recent = await prisma.lipidRecord.create({
+      data: { userId, tc: 4.8, fasting: true, measuredAt: new Date(), note: '' }
+    });
+    const response = await request(app.server).get('/api/app/stats?metric=lipid&range=7').set('Authorization', `Bearer ${appToken}`).expect(200);
+    expect(response.body.series.some((item: any) => item.id === recent.id)).toBe(true);
+    expect(response.body.series.some((item: any) => item.id === old.id)).toBe(false);
   });
 
   test('builds weekly report from metrics recorded in the last 7 days', async () => {
@@ -241,6 +309,28 @@ describe('permission matrix', () => {
 
   test('④ staff cannot call staff management', async () => {
     await request(app.server).get('/api/pharmacy/staff').set('Authorization', `Bearer ${pharmacyToken}`).expect(403);
+    await request(app.server)
+      .post('/api/pharmacy/staff')
+      .set('Authorization', `Bearer ${pharmacyToken}`)
+      .send({ username: 'forbidden_staff', name: '越权员工', password: 'Password@123' })
+      .expect(403);
+    expect(await prisma.pharmacyStaff.count({ where: { username: 'forbidden_staff' } })).toBe(0);
+    const before = await prisma.pharmacy.findUniqueOrThrow({ where: { id: pharmacyId } });
+    await request(app.server)
+      .patch('/api/pharmacy/profile')
+      .set('Authorization', `Bearer ${pharmacyToken}`)
+      .send({ name: '越权修改' })
+      .expect(403);
+    expect((await prisma.pharmacy.findUniqueOrThrow({ where: { id: pharmacyId } })).name).toBe(before.name);
+  });
+
+  test('owner cannot modify staff from another pharmacy', async () => {
+    await request(app.server)
+      .patch(`/api/pharmacy/staff/${otherOwnerId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ disabledAt: new Date().toISOString() })
+      .expect(404);
+    expect((await prisma.pharmacyStaff.findUniqueOrThrow({ where: { id: otherOwnerId } })).disabledAt).toBeNull();
   });
 
   test('⑤ admin cannot call customer health data endpoint', async () => {
@@ -281,6 +371,7 @@ describe('invites and admin', () => {
       .expect(200);
     expect(created.body.username).toBe('kn_new_staff');
     expect(created.body.disabledAt).toBeNull();
+    expect(created.body.passwordHash).toBeUndefined();
 
     const disabledAt = new Date().toISOString();
     const disabled = await request(app.server)
@@ -301,6 +392,7 @@ describe('invites and admin', () => {
   test('owner can list staff and admin can create/disable pharmacies', async () => {
     const staff = await request(app.server).get('/api/pharmacy/staff').set('Authorization', `Bearer ${ownerToken}`).expect(200);
     expect(staff.body.items.length).toBeGreaterThan(0);
+    expect(staff.body.items.every((item: any) => item.passwordHash === undefined)).toBe(true);
     const created = await request(app.server)
       .post('/api/admin/pharmacies')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -311,5 +403,29 @@ describe('invites and admin', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ disabledAt: new Date().toISOString() })
       .expect(200);
+  });
+});
+
+describe('wechat code exchange', () => {
+  test('exchanges a login code for a stable openid', async () => {
+    const fetchMock = (async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      expect(url.searchParams.get('appid')).toBe('wx-test');
+      expect(url.searchParams.get('secret')).toBe('secret-test');
+      expect(url.searchParams.get('js_code')).toBe('login-code');
+      return new Response(JSON.stringify({ openid: 'openid-stable', session_key: 'session-key' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    }) as typeof fetch;
+    await expect(exchangeWechatCode('login-code', 'wx-test', 'secret-test', fetchMock)).resolves.toBe('openid-stable');
+  });
+
+  test('rejects a wechat API error response', async () => {
+    const fetchMock = (async () => new Response(JSON.stringify({ errcode: 40029, errmsg: 'invalid code' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    })) as typeof fetch;
+    await expect(exchangeWechatCode('bad-code', 'wx-test', 'secret-test', fetchMock)).rejects.toBeInstanceOf(WechatLoginError);
   });
 });

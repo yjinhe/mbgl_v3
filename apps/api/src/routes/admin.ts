@@ -4,8 +4,8 @@ import { requireAuth } from '../plugins/auth.js';
 import { hashPassword, verifyPassword } from '../services/password.js';
 
 export async function adminRoutes(app: FastifyInstance) {
-  app.post('/auth/login', async (request, reply) => {
-    const body = z.object({ username: z.string(), password: z.string() }).parse(request.body);
+  app.post('/auth/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
+    const body = z.object({ username: z.string().min(1).max(80), password: z.string().min(1).max(128) }).parse(request.body);
     const admin = await app.prisma.adminUser.findUnique({ where: { username: body.username } });
     if (!admin || !(await verifyPassword(body.password, admin.passwordHash))) {
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: '用户名或密码不正确' } });
@@ -50,11 +50,11 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post('/pharmacies', async (request) => {
     const body = z
       .object({
-        name: z.string(),
-        address: z.string().default(''),
-        phone: z.string().default(''),
-        ownerUsername: z.string(),
-        ownerPassword: z.string().min(8)
+        name: z.string().trim().min(1).max(80),
+        address: z.string().trim().max(200).default(''),
+        phone: z.string().trim().max(30).default(''),
+        ownerUsername: z.string().trim().min(3).max(80),
+        ownerPassword: z.string().min(8).max(128)
       })
       .parse(request.body);
     return app.prisma.$transaction(async (tx) => {

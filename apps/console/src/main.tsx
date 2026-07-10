@@ -9,12 +9,19 @@ type View = 'dash' | 'customers' | 'detail' | 'alerts' | 'invites' | 'staff' | '
 function token() { return localStorage.getItem('tangji_console_token') || ''; }
 function aud() { return localStorage.getItem('tangji_console_aud') || 'pharmacy'; }
 
+function clearConsoleSession() {
+  for (const key of ['tangji_console_token', 'tangji_console_aud', 'tangji_console_staff', 'tangji_console_pharmacy']) {
+    localStorage.removeItem(key);
+  }
+}
+
 async function api(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set('content-type', 'application/json');
   const t = token();
   if (t) headers.set('authorization', `Bearer ${t}`);
   const res = await fetch(`${API}${path}`, { ...init, headers });
+  if (res.status === 401) clearConsoleSession();
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error?.message || res.statusText);
   if (res.status === 204) return null;
   return res.json();
@@ -58,11 +65,11 @@ function App() {
           <nav className="bmenu">
             {(isAdmin ? [['adminStats','平台概览'],['adminPharmacies','药房管理']] : [['dash','工作台'],['customers','客户管理'],['alerts','预警中心'],['invites','邀请管理'], ...(staff?.role === 'owner' ? [['staff','员工管理']] : []), ['settings','药房设置']] as any).map(([k, n]: any) => <button key={k} className={view === k || (k === 'customers' && view === 'detail') ? 'on' : ''} onClick={() => setView(k)}>{n}</button>)}
           </nav>
-          <div className="bme"><div className="bn">{staff?.name}</div><div className="br">{staff?.role === 'owner' ? '店长' : staff?.role === 'admin' ? '平台管理员' : '店员'} · {pharmacy?.name}</div><button onClick={() => { localStorage.clear(); setLogged(false); }}>退出登录</button></div>
+          <div className="bme"><div className="bn">{staff?.name}</div><div className="br">{staff?.role === 'owner' ? '店长' : staff?.role === 'admin' ? '平台管理员' : '店员'} · {pharmacy?.name}</div><button onClick={() => { clearConsoleSession(); setLogged(false); }}>退出登录</button></div>
         </aside>
         <main className="bmain">
           <div className="btop"><span className="bt-title">{title(view)}</span><span className="bt-ph">{pharmacy?.name}</span></div>
-          <div className="bbody"><Router view={view} setView={setView} showToast={showToast} /></div>
+          <div className="bbody"><Router view={view} setView={setView} showToast={showToast} setPharmacy={setPharmacy} /></div>
         </main>
         <div className={`btoast ${toast ? 'on' : ''}`}>{toast}</div>
       </div>
@@ -75,27 +82,35 @@ function title(view: View) {
 }
 
 function Login({ onLogin, showToast }: any) {
-  const [username, setUsername] = useState(new URLSearchParams(location.search).get('admin') ? 'admin' : 'kn_li');
-  const [password, setPassword] = useState(new URLSearchParams(location.search).get('admin') ? 'Admin@123456' : 'Kn@123456');
+  const initialKind = new URLSearchParams(location.search).has('admin') ? 'admin' : 'pharmacy';
+  const [kind, setKind] = useState<'pharmacy' | 'admin'>(initialKind);
+  const [username, setUsername] = useState(import.meta.env.DEV ? (initialKind === 'admin' ? 'admin' : 'kn_li') : '');
+  const [password, setPassword] = useState(import.meta.env.DEV ? (initialKind === 'admin' ? 'Admin@123456' : 'Kn@123456') : '');
+
+  function switchKind(nextKind: 'pharmacy' | 'admin') {
+    setKind(nextKind);
+    setUsername(import.meta.env.DEV ? (nextKind === 'admin' ? 'admin' : 'kn_li') : '');
+    setPassword(import.meta.env.DEV ? (nextKind === 'admin' ? 'Admin@123456' : 'Kn@123456') : '');
+  }
+
   async function submit() {
     try {
-      const kind = username === 'admin' ? 'admin' : 'pharmacy';
       const res = await fetch(`${API}/api/${kind}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password }) });
       if (!res.ok) throw new Error('用户名或密码不正确');
       onLogin(await res.json(), kind);
     } catch (e: any) { showToast(e.message); }
   }
-  return <div className="console-stage"><div className="bshell"><div className="blogin"><div className="lc"><div className="lt">💧 糖迹 · 药房工作台</div><div className="ls">慢病客户健康管理与异常预警</div><input value={username} onChange={(e) => setUsername(e.target.value)} /><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /><button className="btn primary" onClick={submit}>登录</button><div className="bfoot" style={{ textAlign: 'center', marginTop: 12 }}>演示账号可直接登录</div></div></div></div></div>;
+  return <div className="console-stage"><div className="bshell"><div className="blogin"><div className="lc"><div className="lt">💧 糖迹 · 药房工作台</div><div className="ls">慢病客户健康管理与异常预警</div><div className="itab" style={{ marginBottom: 12 }}><button className={kind === 'pharmacy' ? 'on' : ''} onClick={() => switchKind('pharmacy')}>药房账号</button><button className={kind === 'admin' ? 'on' : ''} onClick={() => switchKind('admin')}>平台管理员</button></div><input value={username} onChange={(e) => setUsername(e.target.value)} /><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /><button className="btn primary" disabled={!username || !password} onClick={submit}>登录</button>{import.meta.env.DEV && <div className="bfoot" style={{ textAlign: 'center', marginTop: 12 }}>演示账号可直接登录</div>}</div></div></div></div>;
 }
 
-function Router({ view, setView, showToast }: any) {
+function Router({ view, setView, showToast, setPharmacy }: any) {
   if (view === 'dash') return <Dashboard setView={setView} />;
   if (view === 'customers') return <Customers setView={setView} />;
   if (view === 'detail') return <CustomerDetail setView={setView} showToast={showToast} />;
   if (view === 'alerts') return <Alerts showToast={showToast} />;
   if (view === 'invites') return <Invites showToast={showToast} />;
   if (view === 'staff') return <Staff showToast={showToast} />;
-  if (view === 'settings') return <Settings showToast={showToast} />;
+  if (view === 'settings') return <Settings showToast={showToast} setPharmacy={setPharmacy} />;
   if (view === 'adminStats') return <AdminStats />;
   return <AdminPharmacies showToast={showToast} />;
 }
@@ -131,7 +146,7 @@ function CustomerDetail({ setView }: any) {
   useEffect(() => {
     if (!id) return;
     Promise.all([
-      api(`/api/pharmacy/customers/${id}/records?metric=${metric}`),
+      api(`/api/pharmacy/customers/${id}/records?metric=${metric}&limit=200`),
       api(`/api/pharmacy/customers/${id}/stats?metric=${metric}&range=30`)
     ])
       .then(([recordData, statsData]) => {
@@ -215,8 +230,44 @@ function Staff({ showToast }: any) {
   return <><div className="bcard"><div className="bh"><span className="t">新增员工</span></div><div className="staff-form"><input className="bsearch" placeholder="用户名" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /><input className="bsearch" placeholder="姓名" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input className="bsearch" placeholder="初始密码 ≥8 位" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /><select className="bsearch" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="staff">店员</option><option value="owner">店长</option></select><button className="bbtn" onClick={create}>新增员工</button></div></div><div className="bcard"><table className="btab"><thead><tr><th>姓名</th><th>用户名</th><th>角色</th><th>状态</th><th></th></tr></thead><tbody>{items.map((s) => <tr key={s.id}><td>{s.name}</td><td>{s.username}</td><td>{s.role === 'owner' ? '店长' : '店员'}</td><td>{s.disabledAt ? <span className="pill danger">停用</span> : <span className="pill ok">在职</span>}</td><td><button className="bbtn sm line" onClick={() => toggle(s)}>{s.disabledAt ? '启用' : '停用'}</button></td></tr>)}</tbody></table></div></>;
 }
 
-function Settings({ showToast }: any) {
-  return <div className="bcard" style={{ maxWidth: 520 }}><div className="bh"><span className="t">药房资料</span></div><input className="bsearch" style={{ width: '100%', marginBottom: 10 }} placeholder="药房名称" /><input className="bsearch" style={{ width: '100%', marginBottom: 10 }} placeholder="门店地址" /><button className="bbtn" onClick={() => showToast('已保存')}>保存</button></div>;
+function Settings({ showToast, setPharmacy }: any) {
+  const currentStaff = JSON.parse(localStorage.getItem('tangji_console_staff') || 'null');
+  const canEdit = currentStaff?.role === 'owner';
+  const [form, setForm] = useState({ name: '', address: '', phone: '' });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api('/api/pharmacy/profile')
+      .then((profile) => setForm({ name: profile.name || '', address: profile.address || '', phone: profile.phone || '' }))
+      .catch((error) => showToast(error.message));
+  }, []);
+
+  async function save() {
+    if (!canEdit || saving) return;
+    try {
+      setSaving(true);
+      const profile = await api('/api/pharmacy/profile', { method: 'PATCH', body: JSON.stringify(form) });
+      const nextPharmacy = { name: profile.name };
+      localStorage.setItem('tangji_console_pharmacy', JSON.stringify(nextPharmacy));
+      setPharmacy(nextPharmacy);
+      setForm({ name: profile.name || '', address: profile.address || '', phone: profile.phone || '' });
+      showToast('药房资料已保存');
+    } catch (error: any) {
+      showToast(error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="bcard" style={{ maxWidth: 520 }}>
+      <div className="bh"><span className="t">药房资料</span></div>
+      <input className="bsearch" style={{ width: '100%', marginBottom: 10 }} placeholder="药房名称" value={form.name} disabled={!canEdit} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+      <input className="bsearch" style={{ width: '100%', marginBottom: 10 }} placeholder="门店地址" value={form.address} disabled={!canEdit} onChange={(event) => setForm({ ...form, address: event.target.value })} />
+      <input className="bsearch" style={{ width: '100%', marginBottom: 10 }} placeholder="联系电话" value={form.phone} disabled={!canEdit} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+      {canEdit && <button className="bbtn" disabled={saving || !form.name.trim()} onClick={save}>{saving ? '保存中…' : '保存'}</button>}
+    </div>
+  );
 }
 
 function AdminStats() {

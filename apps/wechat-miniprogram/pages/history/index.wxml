@@ -21,6 +21,7 @@
             <view class="val num" style="{{item.statusStyle}}">{{item.readText}}</view>
             <button class="delete-mini" data-id="{{item.id}}" catchtap="remove">删</button>
           </view>
+          <button wx:if="{{nextCursor}}" class="btn line" loading="{{loading}}" bindtap="loadMore">加载更多</button>
           <view class="foot-note">点击记录可编辑或删除 · 删除后 7 天内可在回收站找回</view>
         </block>
       </view>

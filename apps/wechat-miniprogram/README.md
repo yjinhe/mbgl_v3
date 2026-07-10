@@ -15,7 +15,7 @@
 2. 用微信开发者工具导入：
 
    ```text
-   /Users/bwrj/Documents/ai/workspace/mbgl_v3/apps/wechat-miniprogram
+   apps/wechat-miniprogram
    ```
 
 3. 默认 API 地址在 `app.js`：
@@ -25,6 +25,8 @@
    ```
 
    小程序体验版/正式版需要在微信公众平台把该域名添加到合法域名。若改回本地联调，真机预览时请使用电脑局域网 IP，并在开发者工具中关闭合法域名校验；手机上的 `127.0.0.1` 指的是手机自己，不是这台电脑。
+
+4. API 生产环境必须设置 `WECHAT_MOCK=false`、`WECHAT_APPID` 和 `WECHAT_SECRET`。后端会通过微信 `jscode2session` 将临时登录 code 换成稳定 openid。
 
 ## 已接入流程
 

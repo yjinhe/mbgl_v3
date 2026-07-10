@@ -23,6 +23,7 @@ Page({
   data: {
     authed: true,
     loading: false,
+    saving: false,
     me: null,
     metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === 'glucose', className: item.key === 'glucose' ? 'on' : '' })),
     metric: 'glucose',
@@ -142,10 +143,6 @@ Page({
   pressKey(event) {
     const key = event.currentTarget.dataset.key;
     const metric = this.data.metric;
-    if (key === 'save') {
-      this.save();
-      return;
-    }
     if (metric === 'bp') {
       this.pressBpKey(key);
       return;
@@ -307,7 +304,9 @@ Page({
   },
 
   async save() {
+    if (this.data.saving) return;
     try {
+      this.setData({ saving: true });
       const metric = this.data.metric;
       const measuredAt = toIsoFromInputs(this.data.dateValue, this.data.timeValue);
       let data = { measuredAt, note: this.data.note };
@@ -348,6 +347,8 @@ Page({
       }
     } catch (error) {
       this.showToast(error.message || '保存失败');
+    } finally {
+      this.setData({ saving: false });
     }
   },
 

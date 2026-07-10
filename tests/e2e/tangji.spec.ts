@@ -40,6 +40,26 @@ test('药房后台可登录并查看客户列表', async ({ page }) => {
   await expect(page.getByPlaceholder('搜索客户昵称…')).toBeVisible();
 });
 
+test('药房店长可以读取并保存药房资料', async ({ page }) => {
+  await page.goto('http://127.0.0.1:5174');
+  await page.locator('.blogin input').nth(0).fill('kangning');
+  await page.locator('.blogin input').nth(1).fill('Kn@123456');
+  await page.getByRole('button', { name: '登录' }).click();
+  await page.getByText('药房设置').click();
+  await expect(page.getByPlaceholder('药房名称')).toHaveValue(/康宁大药房/);
+  await page.getByPlaceholder('门店地址').fill('中山路 128 号');
+  await page.getByPlaceholder('联系电话').fill('0571-87654321');
+  await page.getByRole('button', { name: '保存' }).click();
+  await expect(page.locator('.btoast')).toContainText('药房资料已保存');
+});
+
+test('平台管理员通过独立登录模式进入后台', async ({ page }) => {
+  await page.goto('http://127.0.0.1:5174/?admin=1');
+  await expect(page.getByRole('button', { name: '平台管理员' })).toHaveClass(/on/);
+  await page.getByRole('button', { name: '登录' }).click();
+  await expect(page.getByRole('main').getByText('平台概览')).toBeVisible();
+});
+
 test('C端可切换血糖单位到 mg/dL', async ({ page }) => {
   await page.goto('/');
   await page.getByText('微信一键登录').click();

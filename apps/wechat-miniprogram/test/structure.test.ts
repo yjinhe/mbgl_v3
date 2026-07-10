@@ -72,7 +72,7 @@ describe('wechat miniprogram structure', () => {
     }
     expect(homeWxml).not.toContain('statusbar');
     expect(homeWxml).not.toContain('capsule');
-    for (const anchor of ['sheet', 'sheet-h', 'sheet-body', 'bignum', 'keypad', 'key save', 'mask']) {
+    for (const anchor of ['sheet', 'sheet-h', 'sheet-body', 'bignum', 'keypad', 'record-actions', 'record-save', 'mask']) {
       expect(recordWxml).toContain(anchor);
     }
     for (const cssClass of ['.screen', '.safe-navbar', '.tabbar', '.fab', '.hero', '.mcard', '.sheet', '.keypad']) {
@@ -100,7 +100,7 @@ describe('wechat miniprogram structure', () => {
     expect(appJs).toContain('safeWxCall(() => wx.getMenuButtonBoundingClientRect');
   });
 
-  test('uses a LAN API host so device preview can reach the dev backend', () => {
+  test('uses the production HTTPS API host', () => {
     const appJs = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 
     expect(appJs).toContain("apiBase: 'https://tangji.aiteam.pw'");

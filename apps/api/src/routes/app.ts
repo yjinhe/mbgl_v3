@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import archiver from 'archiver';
 import { z } from 'zod';
-import { config } from '../env.js';
 import { requireAuth, type AppToken } from '../plugins/auth.js';
 import { conflict, notFound, validationError } from '../services/http.js';
 import {
@@ -14,10 +13,15 @@ import {
   userStats,
   validateMetricInput
 } from '../services/records.js';
-import { hashPassword } from '../services/password.js';
+import { resolveWechatOpenid, WechatLoginError } from '../services/wechat.js';
+import { recycleCutoff, recycleDaysLeft } from '../services/recycle.js';
 import { inferBpPeriod, inferGlucosePeriod, localDayKey, type GlucosePeriod, type Metric } from '@tangji/shared';
 
 const metricSchema = z.enum(['glucose', 'bp', 'lipid', 'uric']);
+const pageQuerySchema = z.object({
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(100)
+});
 
 async function currentUser(app: FastifyInstance, auth: AppToken) {
   const user = await app.prisma.user.findUnique({ where: { id: auth.userId } });
@@ -26,9 +30,18 @@ async function currentUser(app: FastifyInstance, auth: AppToken) {
 }
 
 export async function appRoutes(app: FastifyInstance) {
-  app.post('/auth/wechat', async (request) => {
+  app.post('/auth/wechat', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
     const body = z.object({ code: z.string().min(1) }).parse(request.body);
-    const openid = config.wechatMock ? `mock_${body.code}` : body.code;
+    let openid: string;
+    try {
+      openid = await resolveWechatOpenid(body.code);
+    } catch (error) {
+      if (error instanceof WechatLoginError) {
+        request.log.warn({ detail: error.causeDetail }, error.message);
+        return reply.code(502).send({ error: { code: 'WECHAT_AUTH_FAILED', message: '微信登录失败，请稍后重试' } });
+      }
+      throw error;
+    }
     const user = await app.prisma.user.upsert({
       where: { openid },
       update: {},
@@ -110,10 +123,16 @@ export async function appRoutes(app: FastifyInstance) {
 
   app.get('/records/:metric', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
     const metric = metricSchema.parse((request.params as any).metric);
+    const query = pageQuerySchema.parse(request.query);
     const user = await currentUser(app, request.auth as AppToken);
     const where = { userId: user.id, deletedAt: null };
-    const records = await findRecords(app, metric, where);
-    return { items: records.map((record) => serializeRecord(metric, record, user)), nextCursor: null };
+    const records = await findRecordsPage(app, metric, where, query.cursor, query.limit);
+    const hasMore = records.length > query.limit;
+    if (hasMore) records.pop();
+    return {
+      items: records.map((record) => serializeRecord(metric, record, user)),
+      nextCursor: hasMore ? records.at(-1)?.id ?? null : null
+    };
   });
 
   app.post('/records/:metric', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
@@ -123,6 +142,7 @@ export async function appRoutes(app: FastifyInstance) {
     const result = validateMetricInput(metric, body, body?.unit ?? user.unit);
     if (!result.ok) return validationError(reply, result.message);
     const measuredAt = new Date(body.measuredAt ?? Date.now());
+    if (Number.isNaN(measuredAt.getTime())) return validationError(reply, '测量时间不正确');
     const note = String(body.note ?? '').slice(0, 50);
     const created = await createRecord(app, metric, user.id, body, measuredAt, note, (result as any).valueMmol);
     if (metric === 'glucose') await recomputeDailySummary(app.prisma, user.id, localDayKey(measuredAt));
@@ -139,8 +159,14 @@ export async function appRoutes(app: FastifyInstance) {
     const result = validateMetricInput(metric, body, body?.unit ?? user.unit);
     if (!result.ok) return validationError(reply, result.message);
     const measuredAt = new Date(body.measuredAt ?? existing.measuredAt);
-    const updated = await updateRecord(app, metric, existing.id, body, measuredAt, String(body.note ?? existing.note), (result as any).valueMmol);
-    if (metric === 'glucose') await recomputeDailySummary(app.prisma, user.id, localDayKey(measuredAt));
+    if (Number.isNaN(measuredAt.getTime())) return validationError(reply, '测量时间不正确');
+    const updated = await updateRecord(app, metric, existing.id, body, measuredAt, String(body.note ?? existing.note).slice(0, 50), (result as any).valueMmol);
+    if (metric === 'glucose') {
+      const oldDay = localDayKey(existing.measuredAt);
+      const newDay = localDayKey(measuredAt);
+      await recomputeDailySummary(app.prisma, user.id, oldDay);
+      if (newDay !== oldDay) await recomputeDailySummary(app.prisma, user.id, newDay);
+    }
     return { record: serializeRecord(metric, updated, user), safetyAlert: metricSafety(metric, { ...body, valueMmol: (result as any).valueMmol }) };
   });
 
@@ -150,30 +176,38 @@ export async function appRoutes(app: FastifyInstance) {
     const existing = await findRecord(app, metric, (request.params as any).id, user.id);
     if (!existing) return notFound(reply);
     await softDeleteRecord(app, metric, existing.id);
+    if (metric === 'glucose') await recomputeDailySummary(app.prisma, user.id, localDayKey(existing.measuredAt));
     return reply.code(204).send();
   });
 
   app.get('/records/recycle-bin', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request) => {
     const user = await currentUser(app, request.auth as AppToken);
+    const now = new Date();
+    const cutoff = recycleCutoff(now);
     const items = [];
     for (const metric of METRICS) {
-      const records = await findRecords(app, metric, { userId: user.id, deletedAt: { not: null } });
-      items.push(...records.map((record) => ({ ...serializeRecord(metric, record, user), deletedAt: record.deletedAt, daysLeft: 7 })));
+      const records = await findRecords(app, metric, { userId: user.id, deletedAt: { gte: cutoff } });
+      items.push(...records.map((record) => ({
+        ...serializeRecord(metric, record, user),
+        deletedAt: record.deletedAt,
+        daysLeft: recycleDaysLeft(record.deletedAt, now)
+      })));
     }
-    return { items };
+    return { items: items.sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime()) };
   });
 
   app.post('/records/:metric/:id/restore', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
     const metric = metricSchema.parse((request.params as any).metric);
     const user = await currentUser(app, request.auth as AppToken);
     const existing = await findRecord(app, metric, (request.params as any).id, user.id, true);
-    if (!existing) return notFound(reply);
+    if (!existing || !existing.deletedAt || existing.deletedAt < recycleCutoff()) return notFound(reply);
     const restored = await restoreRecord(app, metric, existing.id);
+    if (metric === 'glucose') await recomputeDailySummary(app.prisma, user.id, localDayKey(existing.measuredAt));
     return { record: serializeRecord(metric, restored, user) };
   });
 
   app.get('/stats', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request) => {
-    const query = z.object({ metric: metricSchema, range: z.coerce.number().default(7) }).parse(request.query);
+    const query = z.object({ metric: metricSchema, range: z.coerce.number().int().min(1).max(365).default(7) }).parse(request.query);
     const user = await currentUser(app, request.auth as AppToken);
     return statsForMetric(app.prisma, user.id, user, query.metric, query.range);
   });
@@ -335,7 +369,7 @@ function sanitizeNote(value: string) {
   return String(value ?? '').replaceAll(',', '，');
 }
 
-function localDateTime(value: string | Date) {
+function localDateTime(value: string | Date): [string, string] {
   const d = new Date(value);
   const parts = new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai',
@@ -366,6 +400,16 @@ function metricLabel(metric: Metric) {
 async function findRecords(app: FastifyInstance, metric: Metric, where: any): Promise<any[]> {
   const model = modelFor(app, metric);
   return model.findMany({ where, orderBy: { measuredAt: 'desc' } });
+}
+
+async function findRecordsPage(app: FastifyInstance, metric: Metric, where: any, cursor: string | undefined, limit: number): Promise<any[]> {
+  const model = modelFor(app, metric);
+  return model.findMany({
+    where,
+    orderBy: [{ measuredAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
+  });
 }
 
 async function findRecordsAsc(app: FastifyInstance, metric: Metric, where: any): Promise<any[]> {

@@ -7,12 +7,12 @@
 ```bash
 pnpm install
 pnpm --filter @tangji/api prisma:generate
-DATABASE_URL="file:./dev.db" pnpm --filter @tangji/api exec prisma db push --skip-generate
+DATABASE_URL="file:./dev.db" pnpm --filter @tangji/api prisma:migrate:deploy
 DATABASE_URL="file:./dev.db" pnpm --filter @tangji/api seed
 pnpm dev
 ```
 
-当前环境里 Prisma `db push` 的 schema engine 可能返回 `Schema engine error: undefined`，API 集成测试已用 raw SQL 初始化测试库绕过；开发库如遇到同样问题，请先记录为本机 Prisma engine 问题。
+生产环境只执行 migration，不会自动 seed。演示 seed 会清空现有业务数据，只能用于一次性开发数据库。
 
 ## 演示账号
 
@@ -25,7 +25,7 @@ pnpm dev
 
 ## 微信小程序端
 
-原生小程序工程在 `apps/wechat-miniprogram`，用微信开发者工具导入该目录即可。默认 API 地址为 `http://127.0.0.1:3001`；真机预览时请在 `apps/wechat-miniprogram/app.js` 改成电脑局域网 IP，并在开发者工具中关闭合法域名校验。详细说明见 `apps/wechat-miniprogram/README.md`。
+原生小程序工程在 `apps/wechat-miniprogram`，用微信开发者工具导入该目录即可。当前 API 地址为 `https://tangji.aiteam.pw`；体验版/正式版必须配置 request 合法域名，并在 API 生产环境填写小程序 AppID 与 AppSecret。详细说明见 `apps/wechat-miniprogram/README.md`。
 
 ## Docker 部署
 
@@ -42,11 +42,10 @@ pnpm dev
 
 ## Open Decisions
 
-- P2 测试库使用 raw SQL 初始化，因为当前本机 Prisma schema engine 在 `db push` 阶段崩溃，但 `prisma validate/generate` 正常。
 - C/B 图表先用轻量 DOM 趋势呈现；`packages/shared/chart-options.ts` 已改为 token 化 ECharts option 构造器，后续可替换为真实 ECharts 渲染。
 - seed 已覆盖演示链路、10 客户和预警点，89 天逐参数完整生成仍需继续扩展。
 
 ## Known Issues
 
 - 样式已机械提取并复用原型类名，但血糖四页+录入弹层尚未建立自动像素 diff 基线。
-- E2E 当前 6 条 smoke 通过，覆盖登录、录入弹层、单位切换、周报/导出/回收站、后台登录和预警跟进；仍可继续加强为 SPEC §13.4 的逐字断言版本。
+- E2E 覆盖登录、录入弹层、单位切换、周报/导出/回收站、后台登录、药房资料和预警跟进；仍可继续加强为 SPEC §13.4 的逐字断言版本。

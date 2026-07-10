@@ -36,7 +36,10 @@ declare module 'fastify' {
 }
 
 export const authPlugin = fp(async (app: FastifyInstance) => {
-  await app.register(jwt, { secret: config.jwtSecret });
+  await app.register(jwt, {
+    secret: config.jwtSecret,
+    sign: { expiresIn: config.jwtExpiresIn }
+  });
 });
 
 function forbidden(reply: FastifyReply, message = 'FORBIDDEN') {

@@ -9,6 +9,7 @@ Page({
     metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === 'glucose', className: item.key === 'glucose' ? 'on' : '' })),
     metric: 'glucose',
     records: [],
+    nextCursor: null,
     hasRecords: false,
     navStyle: ''
   },
@@ -30,21 +31,29 @@ Page({
     this.setData({
       metric,
       metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === metric, className: item.key === metric ? 'on' : '' }))
-    }, () => this.load());
+    }, () => this.load(true));
   },
 
-  async load() {
+  async load(reset = true) {
     if (!(await ensureLogin(this))) return;
+    if (this.data.loading) return;
     try {
       this.setData({ loading: true });
-      const res = await request(`/api/app/records/${this.data.metric}`);
-      const records = (res.items || []).map((item) => decorateRecord(this.data.metric, item));
-      this.setData({ records, hasRecords: records.length > 0, authed: true });
+      const cursor = reset ? null : this.data.nextCursor;
+      const query = cursor ? `?limit=50&cursor=${encodeURIComponent(cursor)}` : '?limit=50';
+      const res = await request(`/api/app/records/${this.data.metric}${query}`);
+      const incoming = (res.items || []).map((item) => decorateRecord(this.data.metric, item));
+      const records = reset ? incoming : this.data.records.concat(incoming);
+      this.setData({ records, nextCursor: res.nextCursor || null, hasRecords: records.length > 0, authed: true });
     } catch (error) {
       wx.showToast({ title: error.message || '加载失败', icon: 'none' });
     } finally {
       this.setData({ loading: false });
     }
+  },
+
+  loadMore() {
+    if (this.data.nextCursor) this.load(false);
   },
 
   async remove(event) {
@@ -59,7 +68,7 @@ Page({
         try {
           await request(`/api/app/records/${this.data.metric}/${id}`, { method: 'DELETE' });
           wx.showToast({ title: '已删除', icon: 'none' });
-          this.load();
+          this.load(true);
         } catch (error) {
           wx.showToast({ title: error.message || '删除失败', icon: 'none' });
         }

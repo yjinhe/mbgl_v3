@@ -30,24 +30,36 @@ cp .env.docker.example .env.docker
 nano .env.docker
 ```
 
-首次演示初始化可用：
-
-```env
-SEED_ON_BOOT=true
-WECHAT_MOCK=true
-JWT_SECRET=换成一段足够长的随机字符串
-WECHAT_APPID=
-WECHAT_SECRET=
-WEB_ORIGIN=https://app.example.com
-TZ=Asia/Shanghai
-ADMIN_INIT_PASSWORD=Admin@123456
-```
-
-确认演示数据已生成后，建议把 `SEED_ON_BOOT` 改回：
+生产配置示例：
 
 ```env
 SEED_ON_BOOT=false
+ALLOW_DESTRUCTIVE_SEED=false
+BASELINE_INITIAL_MIGRATION=false
+WECHAT_MOCK=false
+WECHAT_APPID=你的小程序AppID
+WECHAT_SECRET=你的小程序AppSecret
+JWT_SECRET=使用 openssl rand -hex 32 生成
+JWT_EXPIRES_IN=7d
+WEB_ORIGIN=https://app.example.com,https://console.example.com
+TZ=Asia/Shanghai
+ADMIN_INIT_USERNAME=admin
+ADMIN_INIT_PASSWORD=至少12位的初始密码
 ```
+
+生产环境禁止 `WECHAT_MOCK=true`。全新数据库启动后，用非破坏性命令创建首个管理员：
+
+```bash
+docker compose exec tangji-api pnpm --filter @tangji/api admin:bootstrap
+```
+
+只有一次性演示数据库需要 seed；seed 会清空全部业务数据，必须同时显式开启两个开关：
+
+```bash
+docker compose run --rm -e SEED_ON_BOOT=true -e ALLOW_DESTRUCTIVE_SEED=true tangji-api true
+```
+
+旧版本通过 `prisma db push` 创建的现有数据库，升级前先备份，并在首次启动时临时设置 `BASELINE_INITIAL_MIGRATION=true`。启动成功后立刻改回 `false`，后续由 `prisma migrate deploy` 管理结构。
 
 ## 构建和启动
 
@@ -152,12 +164,15 @@ docker compose logs -f tangji-frontends
 # 停止容器，不删除数据库 volume
 docker compose down
 
-# 备份 SQLite
+# 备份 SQLite（短暂停止写入，避免复制到不一致状态）
+docker compose stop tangji-api
 docker run --rm -v mbgl_v3_tangji_api_data:/data -v "$PWD":/backup busybox cp /data/prod.db /backup/prod.db.backup
+docker compose start tangji-api
 ```
 
 ## 注意事项
 
 - 当前全栈部署仍使用 SQLite，适合演示、体验版、小规模测试。
-- 长期正式运营建议迁移 PostgreSQL，并修复 API TypeScript build 后改成运行编译产物。
+- API 镜像会先完成 TypeScript build，再以非 root 用户运行编译产物。
+- 长期正式运营建议迁移 PostgreSQL 或托管数据库，并配置自动异地备份。
 - 国外 VPS 可做体验版联调；微信小程序正式发布通常还涉及 HTTPS 合法域名、备案和类目资质要求。

@@ -6,9 +6,9 @@
 
 - 当前方案只容器化后端 API。
 - 数据库沿用 SQLite，并通过 Docker volume 持久化到 `/data/prod.db`。
-- 容器内使用 `tsx src/server.ts` 启动 API，避免当前 TypeScript 严格类型检查中的 CSV 导出类型问题阻塞临时体验版部署。
+- 容器构建时执行 TypeScript 检查，运行时使用编译后的 `dist/src/server.js`。
 - 适合体验版、临时演示、少量测试用户。
-- 如果进入正式长期运营，建议修复 API 的 TypeScript 构建错误，并迁移到 PostgreSQL 或托管数据库。
+- 如果进入正式长期运营，建议迁移到 PostgreSQL 或托管数据库并配置自动备份。
 
 ## 服务器准备
 
@@ -46,34 +46,36 @@ cp .env.docker.example .env.docker
 nano .env.docker
 ```
 
-体验版最小配置：
-
-```env
-SEED_ON_BOOT=true
-WECHAT_MOCK=true
-JWT_SECRET=换成一段足够长的随机字符串
-WECHAT_APPID=
-WECHAT_SECRET=
-WEB_ORIGIN=https://console.example.com
-TZ=Asia/Shanghai
-ADMIN_INIT_PASSWORD=Admin@123456
-```
-
-第一次启动可保留 `SEED_ON_BOOT=true`，用于写入演示账号和演示数据。确认数据已生成后，建议改成：
+生产最小配置：
 
 ```env
 SEED_ON_BOOT=false
-```
-
-否则容器重启时会重新 seed，可能覆盖演示数据。
-
-正式小程序发布前，如果要使用真实微信登录，应改成：
-
-```env
+ALLOW_DESTRUCTIVE_SEED=false
+BASELINE_INITIAL_MIGRATION=false
 WECHAT_MOCK=false
-WECHAT_APPID=你的小程序 AppID
-WECHAT_SECRET=你的小程序 AppSecret
+JWT_SECRET=使用 openssl rand -hex 32 生成
+JWT_EXPIRES_IN=7d
+WECHAT_APPID=你的小程序AppID
+WECHAT_SECRET=你的小程序AppSecret
+WEB_ORIGIN=https://console.example.com
+TZ=Asia/Shanghai
+ADMIN_INIT_USERNAME=admin
+ADMIN_INIT_PASSWORD=至少12位的初始密码
 ```
+
+全新数据库启动后创建首个管理员，不需要 seed：
+
+```bash
+docker compose -f docker-compose.api.yml exec tangji-api pnpm --filter @tangji/api admin:bootstrap
+```
+
+演示 seed 会清空全部业务数据，只允许对一次性数据库显式执行：
+
+```bash
+docker compose -f docker-compose.api.yml run --rm -e SEED_ON_BOOT=true -e ALLOW_DESTRUCTIVE_SEED=true tangji-api true
+```
+
+旧版本通过 `prisma db push` 创建的数据库，首次升级 migration 前先备份，临时设置 `BASELINE_INITIAL_MIGRATION=true` 启动一次，成功后立即改回 `false`。
 
 ## 启动后端容器
 
@@ -163,7 +165,7 @@ apps/wechat-miniprogram/app.js
 把：
 
 ```js
-apiBase: 'http://192.168.66.8:3001'
+apiBase: 'https://tangji.aiteam.pw'
 ```
 
 改成：
@@ -209,8 +211,10 @@ docker compose -f docker-compose.api.yml down
 # 查看持久化卷
 docker volume ls | grep tangji
 
-# 备份 SQLite 数据库
+# 备份 SQLite 数据库（先停止 API 写入）
+docker compose -f docker-compose.api.yml stop tangji-api
 docker run --rm -v mbgl_v3_tangji_api_data:/data -v "$PWD":/backup busybox cp /data/prod.db /backup/prod.db.backup
+docker compose -f docker-compose.api.yml start tangji-api
 ```
 
 ## 小程序体验版验收路径
