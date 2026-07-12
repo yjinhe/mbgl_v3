@@ -6,6 +6,9 @@ export async function createSqliteSchema(prisma: PrismaClient) {
     `CREATE TABLE "User" (
       "id" TEXT NOT NULL PRIMARY KEY,
       "openid" TEXT NOT NULL UNIQUE,
+      "miniOpenid" TEXT UNIQUE,
+      "webOpenid" TEXT UNIQUE,
+      "unionid" TEXT UNIQUE,
       "nickname" TEXT NOT NULL DEFAULT '微信用户',
       "sex" TEXT,
       "unit" TEXT NOT NULL DEFAULT 'mmol',
@@ -92,6 +95,7 @@ export async function createSqliteSchema(prisma: PrismaClient) {
       "passwordHash" TEXT NOT NULL,
       "name" TEXT NOT NULL,
       "role" TEXT NOT NULL DEFAULT 'staff',
+      "authVersion" INTEGER NOT NULL DEFAULT 0,
       "disabledAt" DATETIME,
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
@@ -112,6 +116,7 @@ export async function createSqliteSchema(prisma: PrismaClient) {
       "consentAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "unboundAt" DATETIME
     )`,
+    `CREATE UNIQUE INDEX "PharmacyCustomer_one_active_user" ON "PharmacyCustomer"("userId") WHERE "unboundAt" IS NULL`,
     `CREATE TABLE "FollowUp" (
       "id" TEXT NOT NULL PRIMARY KEY,
       "pharmacyId" TEXT NOT NULL,
@@ -134,10 +139,13 @@ export async function createSqliteSchema(prisma: PrismaClient) {
       "id" TEXT NOT NULL PRIMARY KEY,
       "username" TEXT NOT NULL UNIQUE,
       "passwordHash" TEXT NOT NULL,
+      "authVersion" INTEGER NOT NULL DEFAULT 0,
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`
   ];
   for (const statement of statements) {
     await prisma.$executeRawUnsafe(statement);
   }
+  await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON');
+  await prisma.$queryRawUnsafe('PRAGMA busy_timeout = 5000');
 }

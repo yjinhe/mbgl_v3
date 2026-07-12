@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import archiver from 'archiver';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
+import { config } from '../env.js';
 import { requireAuth, type AppToken } from '../plugins/auth.js';
 import { conflict, notFound, validationError } from '../services/http.js';
 import {
@@ -13,7 +15,12 @@ import {
   userStats,
   validateMetricInput
 } from '../services/records.js';
-import { resolveWechatOpenid, WechatLoginError } from '../services/wechat.js';
+import {
+  resolveWechatOpenid,
+  resolveWechatWebOpenid,
+  WechatLoginError,
+  type ResolvedWechatIdentity
+} from '../services/wechat.js';
 import { recycleCutoff, recycleDaysLeft } from '../services/recycle.js';
 import { inferBpPeriod, inferGlucosePeriod, localDayKey, type GlucosePeriod, type Metric } from '@tangji/shared';
 
@@ -29,26 +36,94 @@ async function currentUser(app: FastifyInstance, auth: AppToken) {
   return user;
 }
 
+type WechatProvider = 'mini' | 'web';
+
+async function findWechatUser(app: FastifyInstance, provider: WechatProvider, identity: ResolvedWechatIdentity) {
+  const providerUser = provider === 'mini'
+    ? await app.prisma.user.findFirst({ where: { OR: [{ miniOpenid: identity.openid }, { openid: identity.openid }] } })
+    : await app.prisma.user.findFirst({ where: { OR: [{ webOpenid: identity.openid }, { openid: `web:${identity.openid}` }] } });
+  const unionUser = identity.unionid
+    ? await app.prisma.user.findUnique({ where: { unionid: identity.unionid } })
+    : null;
+  if (providerUser && unionUser && providerUser.id !== unionUser.id) {
+    throw new WechatLoginError('微信身份关联冲突', { kind: 'identity-conflict' });
+  }
+  return unionUser ?? providerUser;
+}
+
+async function createAppSession(app: FastifyInstance, provider: WechatProvider, identity: ResolvedWechatIdentity) {
+  let user = await findWechatUser(app, provider, identity);
+  const identityData = {
+    ...(provider === 'mini' ? { miniOpenid: identity.openid } : { webOpenid: identity.openid }),
+    ...(identity.unionid ? { unionid: identity.unionid } : {})
+  };
+  try {
+    user = user
+      ? await app.prisma.user.update({ where: { id: user.id }, data: identityData })
+      : await app.prisma.user.create({
+          data: {
+            openid: provider === 'mini' ? identity.openid : `web:${identity.openid}`,
+            ...identityData,
+            nickname: identity.openid === 'mock_seed_demo' ? '微信用户_8462' : '微信用户'
+          }
+        });
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
+    user = await findWechatUser(app, provider, identity);
+    if (!user) throw error;
+    user = await app.prisma.user.update({ where: { id: user.id }, data: identityData });
+  }
+  if (user.deactivatedAt) {
+    throw new WechatLoginError('账号已注销', { kind: 'deactivated' });
+  }
+  const token = app.jwt.sign({ aud: 'app', userId: user.id });
+  return { token, user: { id: user.id, nickname: user.nickname, sex: user.sex, unit: user.unit } };
+}
+
 export async function appRoutes(app: FastifyInstance) {
   app.post('/auth/wechat', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
     const body = z.object({ code: z.string().min(1) }).parse(request.body);
-    let openid: string;
     try {
-      openid = await resolveWechatOpenid(body.code);
+      const identity = await resolveWechatOpenid(body.code);
+      return await createAppSession(app, 'mini', identity);
     } catch (error) {
       if (error instanceof WechatLoginError) {
         request.log.warn({ detail: error.causeDetail }, error.message);
+        if (error.causeDetail?.kind === 'deactivated') {
+          return reply.code(403).send({ error: { code: 'ACCOUNT_DEACTIVATED', message: '账号已注销' } });
+        }
         return reply.code(502).send({ error: { code: 'WECHAT_AUTH_FAILED', message: '微信登录失败，请稍后重试' } });
       }
       throw error;
     }
-    const user = await app.prisma.user.upsert({
-      where: { openid },
-      update: {},
-      create: { openid, nickname: openid === 'mock_seed' ? '微信用户_8462' : '微信用户' }
-    });
-    const token = app.jwt.sign({ aud: 'app', userId: user.id });
-    return { token, user };
+  });
+
+  app.get('/auth/wechat-web/config', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async () => {
+    return {
+      enabled: Boolean(config.wechatWebAppId && config.wechatWebSecret),
+      appId: config.wechatWebAppId,
+      redirectUri: config.wechatWebRedirectUri
+    };
+  });
+
+  app.post('/auth/wechat-web', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (request, reply) => {
+    if (!config.wechatMock && (!config.wechatWebAppId || !config.wechatWebSecret)) {
+      return reply.code(503).send({ error: { code: 'WECHAT_WEB_DISABLED', message: '微信网页授权尚未启用' } });
+    }
+    const body = z.object({ code: z.string().min(1).max(512) }).parse(request.body);
+    try {
+      const identity = await resolveWechatWebOpenid(body.code);
+      return await createAppSession(app, 'web', identity);
+    } catch (error) {
+      if (error instanceof WechatLoginError) {
+        request.log.warn({ detail: error.causeDetail }, error.message);
+        if (error.causeDetail?.kind === 'deactivated') {
+          return reply.code(403).send({ error: { code: 'ACCOUNT_DEACTIVATED', message: '账号已注销' } });
+        }
+        return reply.code(502).send({ error: { code: 'WECHAT_AUTH_FAILED', message: '微信登录失败，请稍后重试' } });
+      }
+      throw error;
+    }
   });
 
   app.get('/me', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request) => {
@@ -98,7 +173,45 @@ export async function appRoutes(app: FastifyInstance) {
         postMealHigh: body.target?.postMealHigh
       }
     });
-    return updated;
+    return {
+      id: updated.id,
+      nickname: updated.nickname,
+      sex: updated.sex,
+      unit: updated.unit,
+      target: {
+        fastingLow: Number(updated.fastingLow),
+        fastingHigh: Number(updated.fastingHigh),
+        postMealHigh: Number(updated.postMealHigh)
+      }
+    };
+  });
+
+  app.delete('/me', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 2, timeWindow: '1 hour' } }
+  }, async (request, reply) => {
+    const user = await currentUser(app, request.auth as AppToken);
+    await app.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        DELETE FROM "FollowUp"
+        WHERE ("metric" = 'glucose' AND "recordId" IN (SELECT "id" FROM "GlucoseRecord" WHERE "userId" = ${user.id}))
+           OR ("metric" = 'bp' AND "recordId" IN (SELECT "id" FROM "BpRecord" WHERE "userId" = ${user.id}))
+           OR ("metric" = 'lipid' AND "recordId" IN (SELECT "id" FROM "LipidRecord" WHERE "userId" = ${user.id}))
+           OR ("metric" = 'uric' AND "recordId" IN (SELECT "id" FROM "UricRecord" WHERE "userId" = ${user.id}))
+      `;
+      await tx.pharmacyAccessLog.deleteMany({ where: { userId: user.id } });
+      await tx.pharmacyCustomer.deleteMany({ where: { userId: user.id } });
+      await tx.dailySummary.deleteMany({ where: { userId: user.id } });
+      await tx.glucoseRecord.deleteMany({ where: { userId: user.id } });
+      await tx.bpRecord.deleteMany({ where: { userId: user.id } });
+      await tx.lipidRecord.deleteMany({ where: { userId: user.id } });
+      await tx.uricRecord.deleteMany({ where: { userId: user.id } });
+      await tx.user.update({
+        where: { id: user.id },
+        data: { deactivatedAt: new Date(), nickname: '已注销用户', sex: null }
+      });
+    }, { timeout: 30_000 });
+    return reply.code(204).send();
   });
 
   app.get('/overview', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request) => {
@@ -135,7 +248,10 @@ export async function appRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post('/records/:metric', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
+  app.post('/records/:metric', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
     const metric = metricSchema.parse((request.params as any).metric);
     const user = await currentUser(app, request.auth as AppToken);
     const body = request.body as any;
@@ -150,7 +266,10 @@ export async function appRoutes(app: FastifyInstance) {
     return reply.code(201).send({ record, safetyAlert: metricSafety(metric, { ...body, valueMmol: (result as any).valueMmol }) });
   });
 
-  app.patch('/records/:metric/:id', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
+  app.patch('/records/:metric/:id', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
     const metric = metricSchema.parse((request.params as any).metric);
     const user = await currentUser(app, request.auth as AppToken);
     const existing = await findRecord(app, metric, (request.params as any).id, user.id);
@@ -170,7 +289,10 @@ export async function appRoutes(app: FastifyInstance) {
     return { record: serializeRecord(metric, updated, user), safetyAlert: metricSafety(metric, { ...body, valueMmol: (result as any).valueMmol }) };
   });
 
-  app.delete('/records/:metric/:id', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
+  app.delete('/records/:metric/:id', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
     const metric = metricSchema.parse((request.params as any).metric);
     const user = await currentUser(app, request.auth as AppToken);
     const existing = await findRecord(app, metric, (request.params as any).id, user.id);
@@ -220,17 +342,27 @@ export async function appRoutes(app: FastifyInstance) {
     return { pharmacyName: invite.pharmacy.name, address: invite.pharmacy.address, staffName: staff?.name ?? '' };
   });
 
-  app.post('/pharmacy/bind', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
+  app.post('/pharmacy/bind', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 10, timeWindow: '10 minutes' } }
+  }, async (request, reply) => {
     const user = await currentUser(app, request.auth as AppToken);
     const body = z.object({ code: z.string().min(1) }).parse(request.body);
     const active = await app.prisma.pharmacyCustomer.findFirst({ where: { userId: user.id, unboundAt: null } });
     if (active) return conflict(reply, 'BINDING_EXISTS');
     const invite = await app.prisma.inviteCode.findUnique({ where: { code: body.code.toUpperCase() }, include: { pharmacy: true } });
     if (!invite || invite.disabledAt || invite.expiresAt < new Date() || invite.pharmacy.disabledAt) return notFound(reply, '邀请码无效或已过期');
-    const binding = await app.prisma.pharmacyCustomer.create({
-      data: { userId: user.id, pharmacyId: invite.pharmacyId, inviteCodeId: invite.id }
-    });
-    return { binding };
+    try {
+      const binding = await app.prisma.pharmacyCustomer.create({
+        data: { userId: user.id, pharmacyId: invite.pharmacyId, inviteCodeId: invite.id }
+      });
+      return { binding };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return conflict(reply, 'BINDING_EXISTS');
+      }
+      throw error;
+    }
   });
 
   app.delete('/pharmacy/bind', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
@@ -239,15 +371,32 @@ export async function appRoutes(app: FastifyInstance) {
     return reply.code(204).send();
   });
 
-  app.get('/report/weekly', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request) => {
+  app.get('/report/weekly', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 30, timeWindow: '10 minutes' } }
+  }, async (request) => {
     const user = await currentUser(app, request.auth as AppToken);
     return weeklyReport(app, user);
   });
 
-  app.get('/export/csv', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
+  app.get('/export/csv', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 5, timeWindow: '10 minutes' } }
+  }, async (request, reply) => {
     const query = z.object({ metric: z.union([metricSchema, z.literal('all')]).default('glucose') }).parse(request.query);
     const user = await currentUser(app, request.auth as AppToken);
     const stamp = dateStamp(new Date());
+    const exportMetrics = query.metric === 'all' ? METRICS : [query.metric];
+    const exportCount = (await Promise.all(exportMetrics.map((metric) => countRecords(app, metric, user.id))))
+      .reduce((sum, count) => sum + count, 0);
+    if (exportCount > config.exportMaxRecords) {
+      return reply.code(413).send({
+        error: {
+          code: 'EXPORT_TOO_LARGE',
+          message: `导出记录超过 ${config.exportMaxRecords} 条，请缩小数据范围`
+        }
+      });
+    }
     if (query.metric === 'all') {
       const archive = archiver('zip', { zlib: { level: 9 } });
       reply.header('content-type', 'application/zip');
@@ -489,4 +638,8 @@ function modelFor(app: FastifyInstance, metric: Metric): any {
   if (metric === 'bp') return app.prisma.bpRecord;
   if (metric === 'lipid') return app.prisma.lipidRecord;
   return app.prisma.uricRecord;
+}
+
+async function countRecords(app: FastifyInstance, metric: Metric, userId: string): Promise<number> {
+  return modelFor(app, metric).count({ where: { userId, deletedAt: null } });
 }

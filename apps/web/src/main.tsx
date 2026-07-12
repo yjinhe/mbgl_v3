@@ -18,12 +18,17 @@ import {
 import './styles.css';
 
 const API = import.meta.env.VITE_API_BASE || '';
+const WECHAT_WEB_STATE_KEY = 'tangji_wechat_web_oauth_state';
+const WECHAT_WEB_RETURN_KEY = 'tangji_wechat_web_oauth_return';
+const WECHAT_WEB_APPID = String(import.meta.env.VITE_WECHAT_WEB_APPID || '').trim();
 
 type Tab = 'home' | 'history' | 'stats' | 'mine';
 type Sub = 'bind' | 'recycle' | 'report' | null;
 type ExportMetric = Metric | 'all';
 type Status = { key: string; label: string };
 type RecordAny = any;
+type WechatWebConfig = { enabled: boolean; appId: string; redirectUri?: string };
+type AuthPhase = 'loading' | 'ready' | 'exchanging' | 'redirecting' | 'disabled' | 'error';
 
 const metrics: Array<{ k: Metric; n: string; u: string; c: string; soft: string }> = [
   { k: 'glucose', n: '血糖', u: 'mmol/L', c: 'var(--m-glucose)', soft: 'var(--m-glucose-soft)' },
@@ -89,6 +94,55 @@ async function api(path: string, init: RequestInit = {}) {
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error?.message || res.statusText);
   if (res.status === 204) return null;
   return res.json();
+}
+
+async function loadWechatWebConfig(): Promise<WechatWebConfig> {
+  const res = await fetch(`${API}/api/app/auth/wechat-web/config`, { headers: { accept: 'application/json' } });
+  if (!res.ok) {
+    if (WECHAT_WEB_APPID) return { enabled: true, appId: WECHAT_WEB_APPID };
+    throw new Error((await res.json().catch(() => null))?.error?.message || '无法读取微信登录配置');
+  }
+  const payload = await res.json();
+  return {
+    enabled: payload.enabled !== false,
+    appId: String(payload.appId || WECHAT_WEB_APPID || '').trim(),
+    redirectUri: payload.redirectUri ? String(payload.redirectUri) : undefined
+  };
+}
+
+function isWechatBrowser() {
+  return /MicroMessenger/i.test(navigator.userAgent);
+}
+
+function createOauthState() {
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function oauthRedirectUri() {
+  const url = new URL(document.baseURI);
+  url.search = '';
+  url.hash = '';
+  return url.toString();
+}
+
+function currentReturnUrl() {
+  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
+
+function finishOauthCallbackUrl() {
+  const returnUrl = sessionStorage.getItem(WECHAT_WEB_RETURN_KEY);
+  sessionStorage.removeItem(WECHAT_WEB_RETURN_KEY);
+  if (returnUrl?.startsWith('/') && !returnUrl.startsWith('//')) {
+    window.history.replaceState(window.history.state, document.title, returnUrl);
+    return;
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.delete('code');
+  url.searchParams.delete('state');
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState(window.history.state, document.title, next);
 }
 
 async function downloadExport(metric: ExportMetric) {
@@ -197,6 +251,9 @@ function toLocalInput(d = new Date()) {
 
 function App() {
   const [token, setToken] = useState(getToken());
+  const [webAuthConfig, setWebAuthConfig] = useState<WechatWebConfig | null>(null);
+  const [authPhase, setAuthPhase] = useState<AuthPhase>(import.meta.env.DEV ? 'ready' : 'loading');
+  const [authMessage, setAuthMessage] = useState('');
   const [tab, setTab] = useState<Tab>('home');
   const [me, setMe] = useState<any>(null);
   const [overview, setOverview] = useState<any>(null);
@@ -211,10 +268,68 @@ function App() {
   const [exportSheet, setExportSheet] = useState(false);
   const [recordAction, setRecordAction] = useState<{ metric: Metric; record: any } | null>(null);
 
-  async function login() {
-    const res = await api('/api/app/auth/wechat', { method: 'POST', body: JSON.stringify({ code: 'seed_demo' }) });
+  function acceptLogin(res: any) {
     localStorage.setItem('tangji_app_token', res.token);
     setToken(res.token);
+  }
+
+  async function deactivateAccount() {
+    try {
+      await api('/api/app/me', { method: 'DELETE' });
+      localStorage.removeItem('tangji_app_token');
+      sessionStorage.removeItem(WECHAT_WEB_STATE_KEY);
+      sessionStorage.removeItem(WECHAT_WEB_RETURN_KEY);
+      setMe(null);
+      setOverview(null);
+      setRecords({ glucose: [], bp: [], lipid: [], uric: [] });
+      setSub(null);
+      setToken('');
+    } catch (error: any) {
+      if (!getToken()) setToken('');
+      showToast(error.message || '注销失败，请稍后重试');
+    }
+  }
+
+  async function login() {
+    if (authPhase === 'loading' || authPhase === 'exchanging' || authPhase === 'redirecting' || authPhase === 'disabled') return;
+    setAuthMessage('');
+    try {
+      if (import.meta.env.DEV) {
+        setAuthPhase('exchanging');
+        const res = await api('/api/app/auth/wechat', { method: 'POST', body: JSON.stringify({ code: 'seed_demo' }) });
+        acceptLogin(res);
+        return;
+      }
+
+      setAuthPhase('loading');
+      const config = webAuthConfig || await loadWechatWebConfig();
+      setWebAuthConfig(config);
+      if (!config.enabled || !config.appId) {
+        setAuthPhase('disabled');
+        setAuthMessage('微信登录尚未配置，请联系管理员');
+        return;
+      }
+      if (!isWechatBrowser()) {
+        setAuthPhase('disabled');
+        setAuthMessage('请在微信中打开此页面后登录');
+        return;
+      }
+
+      const state = createOauthState();
+      sessionStorage.setItem(WECHAT_WEB_STATE_KEY, state);
+      sessionStorage.setItem(WECHAT_WEB_RETURN_KEY, currentReturnUrl());
+      const authorize = new URL('https://open.weixin.qq.com/connect/oauth2/authorize');
+      authorize.searchParams.set('appid', config.appId);
+      authorize.searchParams.set('redirect_uri', config.redirectUri || oauthRedirectUri());
+      authorize.searchParams.set('response_type', 'code');
+      authorize.searchParams.set('scope', 'snsapi_base');
+      authorize.searchParams.set('state', state);
+      setAuthPhase('redirecting');
+      window.location.assign(`${authorize.toString()}#wechat_redirect`);
+    } catch (error: any) {
+      setAuthPhase('error');
+      setAuthMessage(error.message || '微信登录暂时不可用，请稍后重试');
+    }
   }
 
   async function refresh() {
@@ -234,6 +349,62 @@ function App() {
 
   useEffect(() => {
     refresh().catch(() => setToken(''));
+  }, [token]);
+
+  useEffect(() => {
+    if (token || import.meta.env.DEV) return;
+    let cancelled = false;
+    const callback = new URL(window.location.href);
+    const code = callback.searchParams.get('code');
+    const returnedState = callback.searchParams.get('state');
+
+    async function initializeAuth() {
+      if (code && returnedState) {
+        setAuthPhase('exchanging');
+        const expectedState = sessionStorage.getItem(WECHAT_WEB_STATE_KEY);
+        sessionStorage.removeItem(WECHAT_WEB_STATE_KEY);
+        finishOauthCallbackUrl();
+        if (!expectedState || !returnedState || returnedState !== expectedState) {
+          setAuthPhase('error');
+          setAuthMessage('微信登录校验失败，请重新发起登录');
+          return;
+        }
+        try {
+          const res = await api('/api/app/auth/wechat-web', { method: 'POST', body: JSON.stringify({ code }) });
+          if (!cancelled) acceptLogin(res);
+        } catch (error: any) {
+          if (!cancelled) {
+            setAuthPhase('error');
+            setAuthMessage(error.message || '微信登录失败，请重新尝试');
+          }
+        }
+        return;
+      }
+
+      try {
+        setAuthPhase('loading');
+        const config = await loadWechatWebConfig();
+        if (cancelled) return;
+        setWebAuthConfig(config);
+        if (!config.enabled || !config.appId) {
+          setAuthPhase('disabled');
+          setAuthMessage('微信登录尚未配置，请联系管理员');
+        } else if (!isWechatBrowser()) {
+          setAuthPhase('disabled');
+          setAuthMessage('请在微信中打开此页面后登录');
+        } else {
+          setAuthPhase('ready');
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setAuthPhase('error');
+          setAuthMessage(error.message || '微信登录暂时不可用，请稍后重试');
+        }
+      }
+    }
+
+    void initializeAuth();
+    return () => { cancelled = true; };
   }, [token]);
 
   useEffect(() => {
@@ -274,7 +445,10 @@ function App() {
                 <div className="avatar"><DropIcon color="#fff" /></div>
                 <div><div className="n">糖迹</div><div className="d">5 秒记一次健康数据</div></div>
               </div>
-              <button className="btn primary" onClick={login}>微信一键登录</button>
+              <button className="btn primary" disabled={authPhase === 'loading' || authPhase === 'exchanging' || authPhase === 'redirecting' || authPhase === 'disabled'} onClick={login}>
+                {authPhase === 'loading' ? '正在检查登录环境…' : authPhase === 'exchanging' ? '正在登录…' : authPhase === 'redirecting' ? '正在前往微信…' : authPhase === 'error' ? '重试微信登录' : '微信一键登录'}
+              </button>
+              {authMessage && <div className={`login-message ${authPhase === 'error' ? 'error' : ''}`} role={authPhase === 'error' ? 'alert' : 'status'}>{authMessage}</div>}
             </div>
           </div>
         </div>
@@ -292,7 +466,7 @@ function App() {
             <section className={`page ${tab === 'home' ? 'on' : ''}`}><Home overview={overview} me={me} setTab={setTab} setStatMetric={setStatMetric} /></section>
             <section className={`page ${tab === 'history' ? 'on' : ''}`}><History records={records} metric={histMetric} setMetric={setHistMetric} openRecord={(metric: Metric, record: any) => setRecordAction({ metric, record })} /></section>
             <section className={`page ${tab === 'stats' ? 'on' : ''}`}><Stats records={records} metric={statMetric} setMetric={setStatMetric} me={me} openReport={() => setSub('report')} /></section>
-            <section className={`page ${tab === 'mine' ? 'on' : ''}`}><Mine me={me} refresh={refresh} showToast={showToast} openBind={() => setSub('bind')} openRecycle={() => setSub('recycle')} openExport={() => setExportSheet(true)} setModal={setModal} /></section>
+            <section className={`page ${tab === 'mine' ? 'on' : ''}`}><Mine me={me} refresh={refresh} showToast={showToast} openBind={() => setSub('bind')} openRecycle={() => setSub('recycle')} openExport={() => setExportSheet(true)} deactivateAccount={deactivateAccount} setModal={setModal} /></section>
             {sub === 'bind' && <BindSub close={() => setSub(null)} refresh={refresh} showToast={showToast} setModal={setModal} />}
             {sub === 'report' && <ReportSub close={() => setSub(null)} showToast={showToast} openExport={() => setExportSheet(true)} />}
             {sub === 'recycle' && <RecycleSub close={() => setSub(null)} refresh={refresh} showToast={showToast} />}
@@ -458,7 +632,7 @@ function MiniTrend({ records, metric }: any) {
   })}</div>;
 }
 
-function Mine({ me, refresh, showToast, openBind, openRecycle, openExport, setModal }: any) {
+function Mine({ me, refresh, showToast, openBind, openRecycle, openExport, deactivateAccount, setModal }: any) {
   async function patch(data: any) {
     await api('/api/app/me', { method: 'PATCH', body: JSON.stringify(data) });
     await refresh();
@@ -478,6 +652,16 @@ function Mine({ me, refresh, showToast, openBind, openRecycle, openExport, setMo
       actions: [{ t: '再想想' }, { t: '确认解绑', cb: unbind }]
     });
   }
+  function confirmDeactivation() {
+    const total = me?.stats?.totalRecords ?? 0;
+    setModal({
+      title: '注销并删除全部数据？',
+      ring: 'var(--danger-soft)',
+      icon: '⚠️',
+      body: `将删除账号下全部 ${total} 条健康记录及关联数据（四类指标合计），该操作不可恢复。如需留底，请先导出数据。`,
+      actions: [{ t: '再想想' }, { t: '确认注销', danger: true, cb: deactivateAccount }]
+    });
+  }
   return (
     <>
       <div className="me-head"><div className="avatar"><DropIcon color="#fff" /></div><div><div className="n">{me?.nickname}</div><div className="d">已记录 {me?.stats?.totalRecords ?? 0} 条 · 覆盖 {me?.stats?.coveredDays ?? 0} 天</div></div></div>
@@ -492,6 +676,7 @@ function Mine({ me, refresh, showToast, openBind, openRecycle, openExport, setMo
       <div className="card" style={{ padding: '4px 16px' }}>
         <div className="cell" onClick={openExport}><div className="cm"><div className="ct">导出数据</div><div className="cs">按指标导出 CSV，可随时带走你的数据</div></div><span className="cv">›</span></div>
         <div className="cell" onClick={openRecycle}><div className="cm"><div className="ct">回收站</div><div className="cs">删除的记录保留 7 天</div></div><span className="cv">›</span></div>
+        <div className="cell" onClick={confirmDeactivation}><div className="cm"><div className="ct danger-copy">注销账号</div><div className="cs">永久删除全部健康记录及关联数据</div></div><span className="cv danger-copy">›</span></div>
       </div>
       <div className="foot-note">糖迹仅作记录工具，不提供诊断与用药建议，请遵医嘱</div>
     </>
@@ -678,6 +863,7 @@ function RecordSheet({ open, metric, setMetric, me, refresh, close, showToast, s
     } catch (e: any) { showToast(e.message); }
   }
 
+  if (!open) return null;
   return <div className={`sheet ${open ? 'on' : ''}`}><div className="sheet-h"><span className="t">记一笔</span><button className="x" onClick={close}>✕</button></div><div className="sheet-body"><div className="msg">{metrics.map((m) => <button className={metric === m.k ? 'on' : ''} key={m.k} onClick={() => setMetric(m.k)}><span className="seg-ic" style={{ color: metric === m.k ? m.c : 'inherit' }}><MetricIcon metric={m.k} /></span>{m.n}</button>)}</div><div className="time-row"><SheetTimeIcon /><input type="datetime-local" value={time} onChange={(e) => setTime(e.target.value)} /></div>{metric === 'bp' ? <BpPanel bp={bp} setBp={setBp} live={live} period={period} setPeriod={setPeriod} tags={tags} setTags={setTags} /> : metric === 'lipid' ? <LipidPanel lipid={lipid} setLipid={setLipid} live={live} /> : <BigPanel metric={metric} buf={buf} live={live} unit={metric === 'glucose' ? (me?.unit === 'mgdl' ? 'mg/dL' : 'mmol/L') : 'μmol/L'} period={period} setPeriod={setPeriod} tags={tags} setTags={setTags} fasting={fasting} setFasting={setFasting} />}<div className="f-label">备注（选填）</div><input className="note-in" maxLength={50} value={note} onChange={(e) => setNote(e.target.value)} /></div>{metric !== 'lipid' ? <div className="keypad">{['1','2','3','save','4','5','6','7','8','9','.','0','del'].map((k) => k === 'save' ? <button key={k} className="key save" onClick={save}>保存记录</button> : <button key={k} className={`key ${k === '.' || k === 'del' ? 'fn' : ''}`} onClick={() => key(k)}>{k === 'del' ? <DeleteKeyIcon /> : metric === 'bp' && k === '.' ? '下一项' : k === '.' ? '·' : k}</button>)}</div> : <div id="lipidSaveBar"><button className="btn primary" onClick={save}>保存记录</button></div>}</div>;
 }
 
@@ -721,7 +907,7 @@ function safetyModal(metric: Metric, record: any, me: any) {
 }
 
 function SafetyModal({ modal, close }: any) {
-  return <div className="modal on"><div className="m-ic"><div className="ring" style={{ background: modal.ring }}>{modal.icon}</div></div><div className="m-t">{modal.title}</div><div className="m-b">{modal.body}</div><div className="m-note">本程序不提供诊疗建议，请遵医嘱</div><div className="m-acts">{modal.actions.map((a: any, i: number) => <button key={i} onClick={() => { close(); a.cb?.(); }}>{a.t}</button>)}</div></div>;
+  return <div className="modal on"><div className="m-ic"><div className="ring" style={{ background: modal.ring }}>{modal.icon}</div></div><div className="m-t">{modal.title}</div><div className="m-b">{modal.body}</div><div className="m-note">本程序不提供诊疗建议，请遵医嘱</div><div className="m-acts">{modal.actions.map((a: any, i: number) => <button className={a.danger ? 'danger-action' : ''} key={i} onClick={() => { close(); a.cb?.(); }}>{a.t}</button>)}</div></div>;
 }
 
 createRoot(document.getElementById('root')!).render(<App />);

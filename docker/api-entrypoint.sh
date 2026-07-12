@@ -1,6 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
+umask 077
+
 export DATABASE_URL="${DATABASE_URL:-file:/data/prod.db}"
 export PORT="${PORT:-3001}"
 
@@ -11,14 +13,14 @@ if [ "$(id -u)" = "0" ]; then
   exec gosu node "$0" "$@"
 fi
 
+echo "[api] version=${APP_VERSION:-unknown} build=${BUILD_SHA:-unknown}"
 echo "[api] DATABASE_URL=${DATABASE_URL}"
-if [ "${BASELINE_INITIAL_MIGRATION:-false}" = "true" ]; then
-  echo "[api] Marking the initial migration as applied for an existing database..."
-  pnpm --filter @tangji/api exec prisma migrate resolve --applied 20260710000000_initial
-fi
+
+/app/docker/migration-preflight.sh before
 
 echo "[api] Applying Prisma migrations..."
 pnpm --filter @tangji/api exec prisma migrate deploy
+/app/docker/migration-preflight.sh after
 
 if [ "${SEED_ON_BOOT:-false}" = "true" ]; then
   if [ "${ALLOW_DESTRUCTIVE_SEED:-false}" != "true" ]; then

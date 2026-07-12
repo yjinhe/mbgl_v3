@@ -3,9 +3,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
-    image: tangji-api:latest
-    container_name: tangji-api
+      args:
+        APP_VERSION: ${APP_VERSION:-0.1.0}
+        BUILD_SHA: ${BUILD_SHA:-unknown}
+    image: "${TANGJI_API_IMAGE:-tangji-api}:${IMAGE_TAG:-dev}"
     restart: unless-stopped
+    init: true
+    cpus: "${API_CPU_LIMIT:-1.0}"
+    mem_limit: "${API_MEMORY_LIMIT:-768m}"
+    pids_limit: ${API_PIDS_LIMIT:-256}
+    security_opt:
+      - no-new-privileges:true
     env_file:
       - .env.docker
     environment:
@@ -13,7 +21,7 @@ services:
       PORT: 3001
       DATABASE_URL: file:/data/prod.db
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     volumes:
       - tangji_api_data:/data
     healthcheck:
@@ -22,6 +30,12 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    stop_grace_period: 30s
 
 volumes:
   tangji_api_data:

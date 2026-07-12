@@ -6,6 +6,10 @@ import './styles.css';
 const API = import.meta.env.VITE_API_BASE || '';
 type View = 'dash' | 'customers' | 'detail' | 'alerts' | 'invites' | 'staff' | 'settings' | 'adminStats' | 'adminPharmacies';
 
+function isStrongPassword(password: string) {
+  return password.length >= 12 && password.length <= 128 && /[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
+}
+
 function token() { return localStorage.getItem('tangji_console_token') || ''; }
 function aud() { return localStorage.getItem('tangji_console_aud') || 'pharmacy'; }
 
@@ -33,13 +37,38 @@ function App() {
   const [staff, setStaff] = useState<any>(JSON.parse(localStorage.getItem('tangji_console_staff') || 'null'));
   const [pharmacy, setPharmacy] = useState<any>(JSON.parse(localStorage.getItem('tangji_console_pharmacy') || 'null'));
   const [toast, setToast] = useState('');
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [loginNotice, setLoginNotice] = useState('');
+  const [sessionReady, setSessionReady] = useState(false);
+
+  useEffect(() => {
+    if (!logged) {
+      setSessionReady(false);
+      return;
+    }
+    let active = true;
+    const validationPath = aud() === 'admin' ? '/api/admin/stats' : '/api/pharmacy/dashboard';
+    api(validationPath)
+      .then(() => { if (active) setSessionReady(true); })
+      .catch(() => {
+        if (!active) return;
+        clearConsoleSession();
+        setStaff(null);
+        setPharmacy(null);
+        setPasswordOpen(false);
+        setLoginNotice('登录状态已失效，请重新登录');
+        setLogged(false);
+      });
+    return () => { active = false; };
+  }, [logged]);
 
   function showToast(msg: string) {
     setToast(msg);
     window.setTimeout(() => setToast(''), 2000);
   }
 
-  if (!logged) return <Login onLogin={(payload: any, kind: 'pharmacy' | 'admin') => {
+  if (!logged) return <Login notice={loginNotice} onLogin={(payload: any, kind: 'pharmacy' | 'admin') => {
+    setLoginNotice('');
     localStorage.setItem('tangji_console_token', payload.token);
     localStorage.setItem('tangji_console_aud', kind);
     if (kind === 'pharmacy') {
@@ -53,8 +82,13 @@ function App() {
       setPharmacy({ name: '平台后台' });
       setView('adminStats');
     }
+    setSessionReady(false);
     setLogged(true);
-  }} showToast={showToast} />;
+  }} />;
+
+  if (!sessionReady) {
+    return <div className="console-stage"><div className="bshell"><div className="blogin"><div className="lc session-check" role="status">正在验证登录状态…</div></div></div></div>;
+  }
 
   const isAdmin = aud() === 'admin';
   return (
@@ -65,12 +99,19 @@ function App() {
           <nav className="bmenu">
             {(isAdmin ? [['adminStats','平台概览'],['adminPharmacies','药房管理']] : [['dash','工作台'],['customers','客户管理'],['alerts','预警中心'],['invites','邀请管理'], ...(staff?.role === 'owner' ? [['staff','员工管理']] : []), ['settings','药房设置']] as any).map(([k, n]: any) => <button key={k} className={view === k || (k === 'customers' && view === 'detail') ? 'on' : ''} onClick={() => setView(k)}>{n}</button>)}
           </nav>
-          <div className="bme"><div className="bn">{staff?.name}</div><div className="br">{staff?.role === 'owner' ? '店长' : staff?.role === 'admin' ? '平台管理员' : '店员'} · {pharmacy?.name}</div><button onClick={() => { clearConsoleSession(); setLogged(false); }}>退出登录</button></div>
+          <div className="bme"><div className="bn">{staff?.name}</div><div className="br">{staff?.role === 'owner' ? '店长' : staff?.role === 'admin' ? '平台管理员' : '店员'} · {pharmacy?.name}</div><div className="bme-actions"><button onClick={() => setPasswordOpen(true)}>修改密码</button><button onClick={() => { clearConsoleSession(); setLoginNotice(''); setSessionReady(false); setLogged(false); }}>退出登录</button></div></div>
         </aside>
         <main className="bmain">
           <div className="btop"><span className="bt-title">{title(view)}</span><span className="bt-ph">{pharmacy?.name}</span></div>
           <div className="bbody"><Router view={view} setView={setView} showToast={showToast} setPharmacy={setPharmacy} /></div>
         </main>
+        {passwordOpen && <ChangePasswordModal close={() => setPasswordOpen(false)} changed={() => {
+          clearConsoleSession();
+          setPasswordOpen(false);
+          setLoginNotice('密码已修改，请使用新密码重新登录');
+          setSessionReady(false);
+          setLogged(false);
+        }} />}
         <div className={`btoast ${toast ? 'on' : ''}`}>{toast}</div>
       </div>
     </div>
@@ -81,26 +122,75 @@ function title(view: View) {
   return ({ dash: '工作台', customers: '客户管理', detail: '客户详情', alerts: '预警中心', invites: '邀请管理', staff: '员工管理', settings: '药房设置', adminStats: '平台概览', adminPharmacies: '药房管理' } as Record<View, string>)[view];
 }
 
-function Login({ onLogin, showToast }: any) {
+function Login({ onLogin, notice }: any) {
   const initialKind = new URLSearchParams(location.search).has('admin') ? 'admin' : 'pharmacy';
   const [kind, setKind] = useState<'pharmacy' | 'admin'>(initialKind);
   const [username, setUsername] = useState(import.meta.env.DEV ? (initialKind === 'admin' ? 'admin' : 'kn_li') : '');
   const [password, setPassword] = useState(import.meta.env.DEV ? (initialKind === 'admin' ? 'Admin@123456' : 'Kn@123456') : '');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   function switchKind(nextKind: 'pharmacy' | 'admin') {
     setKind(nextKind);
+    setError('');
     setUsername(import.meta.env.DEV ? (nextKind === 'admin' ? 'admin' : 'kn_li') : '');
     setPassword(import.meta.env.DEV ? (nextKind === 'admin' ? 'Admin@123456' : 'Kn@123456') : '');
   }
 
   async function submit() {
     try {
+      setSubmitting(true);
+      setError('');
       const res = await fetch(`${API}/api/${kind}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password }) });
       if (!res.ok) throw new Error('用户名或密码不正确');
       onLogin(await res.json(), kind);
-    } catch (e: any) { showToast(e.message); }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
   }
-  return <div className="console-stage"><div className="bshell"><div className="blogin"><div className="lc"><div className="lt">💧 糖迹 · 药房工作台</div><div className="ls">慢病客户健康管理与异常预警</div><div className="itab" style={{ marginBottom: 12 }}><button className={kind === 'pharmacy' ? 'on' : ''} onClick={() => switchKind('pharmacy')}>药房账号</button><button className={kind === 'admin' ? 'on' : ''} onClick={() => switchKind('admin')}>平台管理员</button></div><input value={username} onChange={(e) => setUsername(e.target.value)} /><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /><button className="btn primary" disabled={!username || !password} onClick={submit}>登录</button>{import.meta.env.DEV && <div className="bfoot" style={{ textAlign: 'center', marginTop: 12 }}>演示账号可直接登录</div>}</div></div></div></div>;
+  return <div className="console-stage"><div className="bshell"><div className="blogin"><div className="lc"><div className="lt">💧 糖迹 · 药房工作台</div><div className="ls">慢病客户健康管理与异常预警</div>{notice && <div className="login-notice" role="status">{notice}</div>}<div className="itab" style={{ marginBottom: 12 }}><button className={kind === 'pharmacy' ? 'on' : ''} onClick={() => switchKind('pharmacy')}>药房账号</button><button className={kind === 'admin' ? 'on' : ''} onClick={() => switchKind('admin')}>平台管理员</button></div><input aria-label="用户名" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} /><input aria-label="密码" autoComplete="current-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} /><button className="btn primary" disabled={submitting || !username || !password} onClick={submit}>{submitting ? '登录中…' : '登录'}</button>{error && <div className="form-error" role="alert">{error}</div>}{import.meta.env.DEV && <div className="bfoot" style={{ textAlign: 'center', marginTop: 12 }}>演示账号可直接登录</div>}</div></div></div></div>;
+}
+
+function ChangePasswordModal({ close, changed }: { close: () => void; changed: () => void }) {
+  const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const valid = Boolean(form.currentPassword) && isStrongPassword(form.newPassword) && form.newPassword === form.confirmPassword;
+
+  async function submit() {
+    if (!valid || saving) return;
+    try {
+      setSaving(true);
+      setError('');
+      await api(`/api/${aud()}/auth/change-password`, {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: form.currentPassword, newPassword: form.newPassword })
+      });
+      changed();
+    } catch (e: any) {
+      setError(e.message || '密码修改失败');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="bmodal-mask on" onClick={close}>
+      <div className="bmodal" role="dialog" aria-modal="true" aria-labelledby="change-password-title" onClick={(event) => event.stopPropagation()}>
+        <div className="mt" id="change-password-title">修改登录密码</div>
+        <div className="password-form">
+          <label className="form-field"><span>当前密码</span><input autoComplete="current-password" type="password" value={form.currentPassword} onChange={(event) => setForm({ ...form, currentPassword: event.target.value })} /></label>
+          <label className="form-field"><span>新密码</span><input autoComplete="new-password" type="password" placeholder="至少 12 位，含大小写字母、数字和符号" value={form.newPassword} onChange={(event) => setForm({ ...form, newPassword: event.target.value })} /></label>
+          <label className="form-field"><span>确认新密码</span><input autoComplete="new-password" type="password" value={form.confirmPassword} onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })} /></label>
+        </div>
+        {form.confirmPassword && form.newPassword !== form.confirmPassword && <div className="form-error" role="alert">两次输入的新密码不一致</div>}
+        {error && <div className="form-error" role="alert">{error}</div>}
+        <div className="macts"><button className="bbtn line" onClick={close}>取消</button><button className="bbtn" disabled={!valid || saving} onClick={submit}>{saving ? '修改中…' : '确认修改'}</button></div>
+      </div>
+    </div>
+  );
 }
 
 function Router({ view, setView, showToast, setPharmacy }: any) {
@@ -217,17 +307,21 @@ function Staff({ showToast }: any) {
   const load = () => api('/api/pharmacy/staff').then((d) => setItems(d.items));
   useEffect(() => { void load(); }, []);
   async function create() {
-    await api('/api/pharmacy/staff', { method: 'POST', body: JSON.stringify(form) });
-    showToast('已新增员工');
-    setForm({ username: '', name: '', password: '', role: 'staff' });
-    load();
+    try {
+      await api('/api/pharmacy/staff', { method: 'POST', body: JSON.stringify(form) });
+      showToast('已新增员工');
+      setForm({ username: '', name: '', password: '', role: 'staff' });
+      load();
+    } catch (error: any) {
+      showToast(error.message);
+    }
   }
   async function toggle(s: any) {
     await api(`/api/pharmacy/staff/${s.id}`, { method: 'PATCH', body: JSON.stringify({ disabledAt: s.disabledAt ? null : new Date().toISOString() }) });
     showToast(s.disabledAt ? '已启用员工' : '已停用员工');
     load();
   }
-  return <><div className="bcard"><div className="bh"><span className="t">新增员工</span></div><div className="staff-form"><input className="bsearch" placeholder="用户名" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /><input className="bsearch" placeholder="姓名" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input className="bsearch" placeholder="初始密码 ≥8 位" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /><select className="bsearch" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="staff">店员</option><option value="owner">店长</option></select><button className="bbtn" onClick={create}>新增员工</button></div></div><div className="bcard"><table className="btab"><thead><tr><th>姓名</th><th>用户名</th><th>角色</th><th>状态</th><th></th></tr></thead><tbody>{items.map((s) => <tr key={s.id}><td>{s.name}</td><td>{s.username}</td><td>{s.role === 'owner' ? '店长' : '店员'}</td><td>{s.disabledAt ? <span className="pill danger">停用</span> : <span className="pill ok">在职</span>}</td><td><button className="bbtn sm line" onClick={() => toggle(s)}>{s.disabledAt ? '启用' : '停用'}</button></td></tr>)}</tbody></table></div></>;
+  return <><div className="bcard"><div className="bh"><span className="t">新增员工</span></div><div className="staff-form"><input className="bsearch" placeholder="用户名" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /><input className="bsearch" placeholder="姓名" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input className="bsearch" type="password" autoComplete="new-password" placeholder="12 位以上强密码" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /><select className="bsearch" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="staff">店员</option><option value="owner">店长</option></select><button className="bbtn" disabled={!form.username.trim() || !form.name.trim() || !isStrongPassword(form.password)} onClick={create}>新增员工</button></div></div><div className="bcard"><table className="btab"><thead><tr><th>姓名</th><th>用户名</th><th>角色</th><th>状态</th><th></th></tr></thead><tbody>{items.map((s) => <tr key={s.id}><td>{s.name}</td><td>{s.username}</td><td>{s.role === 'owner' ? '店长' : '店员'}</td><td>{s.disabledAt ? <span className="pill danger">停用</span> : <span className="pill ok">在职</span>}</td><td><button className="bbtn sm line" onClick={() => toggle(s)}>{s.disabledAt ? '启用' : '停用'}</button></td></tr>)}</tbody></table></div></>;
 }
 
 function Settings({ showToast, setPharmacy }: any) {
@@ -276,12 +370,80 @@ function AdminStats() {
   return <div className="bstats">{data && [['药房总数', data.pharmacyTotal], ['客户总数', data.customerTotal], ['今日记录数', data.recordsToday]].map(([k,v]) => <div className="bstat" key={k as string}><div className="k">{k}</div><div className="v num">{v as any}</div></div>)}</div>;
 }
 
+function secureInitialPassword() {
+  const pools = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789', '!@#$%*-_'];
+  const all = pools.join('');
+  const length = 16;
+  const random = new Uint32Array(length * 2);
+  crypto.getRandomValues(random);
+  const chars = pools.map((pool, index) => pool[random[index]! % pool.length]!);
+  for (let index = chars.length; index < length; index += 1) chars.push(all[random[index]! % all.length]!);
+  for (let index = chars.length - 1; index > 0; index -= 1) {
+    const swapIndex = random[length + index]! % (index + 1);
+    const current = chars[index]!;
+    chars[index] = chars[swapIndex]!;
+    chars[swapIndex] = current;
+  }
+  return chars.join('');
+}
+
 function AdminPharmacies({ showToast }: any) {
   const [items, setItems] = useState<any[]>([]);
+  const [form, setForm] = useState({ name: '', address: '', phone: '', ownerUsername: '', ownerPassword: '' });
+  const [createdAccount, setCreatedAccount] = useState<{ username: string; password: string } | null>(null);
+  const [saving, setSaving] = useState(false);
   const load = () => api('/api/admin/pharmacies').then((d) => setItems(d.items));
   useEffect(() => { void load(); }, []);
-  async function create() { await api('/api/admin/pharmacies', { method: 'POST', body: JSON.stringify({ name: `新药房${Date.now().toString().slice(-4)}`, address: '人民路', phone: '123', ownerUsername: `owner${Date.now().toString().slice(-4)}`, ownerPassword: 'Owner@123' }) }); showToast('已新增药房'); load(); }
-  return <><div className="btools"><button className="bbtn" onClick={create}>新增药房</button></div><div className="bcard"><table className="btab"><tbody>{items.map((p) => <tr key={p.id}><td>{p.name}</td><td>{p.address}</td><td>{p.ownerUsername}</td><td>{p.customerCount}</td><td>{p.disabledAt ? '停用' : '启用'}</td></tr>)}</tbody></table></div></>;
+  const valid = Boolean(form.name.trim() && form.address.trim() && form.phone.trim() && form.ownerUsername.trim().length >= 3 && isStrongPassword(form.ownerPassword));
+
+  async function create() {
+    if (!valid || saving) return;
+    const payload = {
+      name: form.name.trim(),
+      address: form.address.trim(),
+      phone: form.phone.trim(),
+      ownerUsername: form.ownerUsername.trim(),
+      ownerPassword: form.ownerPassword
+    };
+    try {
+      setSaving(true);
+      await api('/api/admin/pharmacies', { method: 'POST', body: JSON.stringify(payload) });
+      setCreatedAccount({ username: payload.ownerUsername, password: payload.ownerPassword });
+      setForm({ name: '', address: '', phone: '', ownerUsername: '', ownerPassword: '' });
+      showToast('药房和店长账号已创建');
+      await load();
+    } catch (error: any) {
+      showToast(error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function copyCreatedAccount() {
+    if (!createdAccount) return;
+    try {
+      await navigator.clipboard.writeText(`用户名：${createdAccount.username}\n初始密码：${createdAccount.password}`);
+      showToast('登录信息已复制');
+    } catch {
+      showToast('复制失败，请手动记录登录信息');
+    }
+  }
+
+  return <>
+    <div className="bcard">
+      <div className="bh"><span className="t">新增药房</span></div>
+      <div className="pharmacy-form">
+        <label className="form-field"><span>药房名称</span><input className="bsearch" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+        <label className="form-field"><span>联系电话</span><input className="bsearch" type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
+        <label className="form-field full"><span>门店地址</span><input className="bsearch" value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></label>
+        <label className="form-field"><span>店长用户名</span><input className="bsearch" autoComplete="off" value={form.ownerUsername} onChange={(event) => setForm({ ...form, ownerUsername: event.target.value })} /></label>
+        <label className="form-field"><span>初始密码</span><div className="password-row"><input className="bsearch" autoComplete="new-password" spellCheck={false} value={form.ownerPassword} onChange={(event) => setForm({ ...form, ownerPassword: event.target.value })} /><button className="bbtn line" onClick={() => setForm({ ...form, ownerPassword: secureInitialPassword() })}>生成</button></div></label>
+      </div>
+      <div className="form-actions"><button className="bbtn" disabled={!valid || saving} onClick={create}>{saving ? '创建中…' : '创建药房'}</button></div>
+    </div>
+    {createdAccount && <div className="credential-note" role="status"><div><b>店长账号已创建</b><span>用户名 {createdAccount.username} · 初始密码 <code>{createdAccount.password}</code></span></div><button className="bbtn sm line" onClick={copyCreatedAccount}>复制登录信息</button></div>}
+    <div className="bcard"><table className="btab"><thead><tr><th>药房</th><th>地址</th><th>店长账号</th><th>客户数</th><th>状态</th></tr></thead><tbody>{items.map((p) => <tr key={p.id}><td>{p.name}</td><td>{p.address}</td><td>{p.ownerUsername}</td><td>{p.customerCount}</td><td>{p.disabledAt ? '停用' : '启用'}</td></tr>)}</tbody></table></div>
+  </>;
 }
 
 createRoot(document.getElementById('root')!).render(<App />);

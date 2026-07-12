@@ -87,6 +87,15 @@ afterAll(async () => {
 });
 
 describe('app records', () => {
+  test('reports a versioned, non-cacheable health response', async () => {
+    const response = await request(app.server).get('/health').expect(200);
+    expect(response.headers['cache-control']).toContain('no-store');
+    expect(response.headers.pragma).toBe('no-cache');
+    expect(response.body).toEqual({ ok: true, version: expect.any(String), buildSha: expect.any(String) });
+    expect(response.body.version.length).toBeGreaterThan(0);
+    expect(response.body.buildSha.length).toBeGreaterThan(0);
+  });
+
   test('maps malformed input to a validation response', async () => {
     const response = await request(app.server).post('/api/pharmacy/auth/login').send({}).expect(422);
     expect(response.body.error.code).toBe('VALIDATION_FAILED');
@@ -290,6 +299,16 @@ describe('binding and alerts', () => {
       .send({ metric: 'bp', recordId: bp.record.id, note: '重复' })
       .expect(200);
   });
+
+  test('database allows only one active pharmacy binding per user', async () => {
+    const user = await prisma.user.create({ data: { openid: 'binding_constraint_user' } });
+    await prisma.pharmacyCustomer.create({ data: { pharmacyId, userId: user.id } });
+
+    await expect(
+      prisma.pharmacyCustomer.create({ data: { pharmacyId: otherPharmacyId, userId: user.id } })
+    ).rejects.toMatchObject({ code: 'P2002' });
+    expect(await prisma.pharmacyCustomer.count({ where: { userId: user.id, unboundAt: null } })).toBe(1);
+  });
 });
 
 describe('permission matrix', () => {
@@ -352,7 +371,118 @@ describe('permission matrix', () => {
       data: { pharmacyId: otherPharmacyId, staffId, code: 'ABCD2345', expiresAt: new Date(Date.now() + 86400000) }
     });
     void otherInvite;
-    await request(app.server).post('/api/app/pharmacy/bind').set('Authorization', `Bearer ${appToken}`).send({ code: 'ABCD2345' }).expect(409);
+    const response = await request(app.server)
+      .post('/api/app/pharmacy/bind')
+      .set('Authorization', `Bearer ${appToken}`)
+      .send({ code: 'ABCD2345' })
+      .expect(409);
+    expect(response.body.error.code).toBe('BINDING_EXISTS');
+  });
+});
+
+describe('password changes', () => {
+  test('pharmacy staff can change password and immediately invalidates the old token', async () => {
+    const username = 'password_change_staff';
+    const currentPassword = 'OldStaff@1234';
+    const newPassword = 'NewStaff@5678';
+    await prisma.pharmacyStaff.create({
+      data: {
+        pharmacyId,
+        username,
+        passwordHash: await hashPassword(currentPassword),
+        name: '改密测试店员',
+        role: 'staff'
+      }
+    });
+    const token = await loginPharmacy(username, currentPassword);
+
+    const rejected = await request(app.server)
+      .post('/api/pharmacy/auth/change-password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ currentPassword: 'WrongStaff@1234', newPassword })
+      .expect(403);
+    expect(rejected.body.error.code).toBe('FORBIDDEN');
+
+    await request(app.server)
+      .post('/api/pharmacy/auth/change-password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ currentPassword, newPassword })
+      .expect(204);
+
+    await request(app.server).get('/api/pharmacy/profile').set('Authorization', `Bearer ${token}`).expect(403);
+    await request(app.server).post('/api/pharmacy/auth/login').send({ username, password: currentPassword }).expect(403);
+    const newToken = await loginPharmacy(username, newPassword);
+    await request(app.server).get('/api/pharmacy/profile').set('Authorization', `Bearer ${newToken}`).expect(200);
+  });
+
+  test('admin can change password and immediately invalidates the old token', async () => {
+    const username = 'password_change_admin';
+    const currentPassword = 'OldAdmin@1234';
+    const newPassword = 'NewAdmin@5678';
+    await prisma.adminUser.create({ data: { username, passwordHash: await hashPassword(currentPassword) } });
+    const login = await request(app.server).post('/api/admin/auth/login').send({ username, password: currentPassword }).expect(200);
+    const token = login.body.token as string;
+
+    const rejected = await request(app.server)
+      .post('/api/admin/auth/change-password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ currentPassword: 'WrongAdmin@1234', newPassword })
+      .expect(403);
+    expect(rejected.body.error.code).toBe('FORBIDDEN');
+
+    await request(app.server)
+      .post('/api/admin/auth/change-password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ currentPassword, newPassword })
+      .expect(204);
+
+    await request(app.server).get('/api/admin/stats').set('Authorization', `Bearer ${token}`).expect(403);
+    await request(app.server).post('/api/admin/auth/login').send({ username, password: currentPassword }).expect(403);
+    const newLogin = await request(app.server).post('/api/admin/auth/login').send({ username, password: newPassword }).expect(200);
+    await request(app.server).get('/api/admin/stats').set('Authorization', `Bearer ${newLogin.body.token}`).expect(200);
+  });
+});
+
+describe('account deactivation', () => {
+  test('deletes health data, revokes pharmacy access, and invalidates existing sessions', async () => {
+    const user = await prisma.user.create({
+      data: {
+        openid: 'mock_deactivate-user',
+        miniOpenid: 'mock_deactivate-user',
+        unionid: 'mock:deactivate-user',
+        nickname: '注销测试用户'
+      }
+    });
+    const glucose = await prisma.glucoseRecord.create({
+      data: { userId: user.id, valueMmol: 6.8, period: 'fasting', measuredAt: new Date(), tags: '[]', note: '' }
+    });
+    await prisma.bpRecord.create({ data: { userId: user.id, sbp: 128, dbp: 82, period: 'morning', measuredAt: new Date(), tags: '[]', note: '' } });
+    await prisma.lipidRecord.create({ data: { userId: user.id, tc: 4.9, fasting: true, measuredAt: new Date(), note: '' } });
+    await prisma.uricRecord.create({ data: { userId: user.id, value: 380, fasting: true, measuredAt: new Date(), note: '' } });
+    await prisma.dailySummary.create({ data: { userId: user.id, date: '2026-07-12', avg: 6.8, max: 6.8, min: 6.8, count: 1, okCount: 1 } });
+    await prisma.pharmacyCustomer.create({ data: { pharmacyId, userId: user.id } });
+    await prisma.followUp.create({ data: { pharmacyId, staffId, metric: 'glucose', recordId: glucose.id, note: '待跟进' } });
+    await prisma.pharmacyAccessLog.create({ data: { pharmacyId, staffId, userId: user.id, action: 'view_customer' } });
+    const token = app.jwt.sign({ aud: 'app', userId: user.id });
+
+    await request(app.server).delete('/api/app/me').set('Authorization', `Bearer ${token}`).expect(204);
+
+    await request(app.server).get('/api/app/me').set('Authorization', `Bearer ${token}`).expect(401);
+    const relogin = await request(app.server).post('/api/app/auth/wechat').send({ code: 'deactivate-user' }).expect(403);
+    expect(relogin.body.error.code).toBe('ACCOUNT_DEACTIVATED');
+    expect(await prisma.glucoseRecord.count({ where: { userId: user.id } })).toBe(0);
+    expect(await prisma.bpRecord.count({ where: { userId: user.id } })).toBe(0);
+    expect(await prisma.lipidRecord.count({ where: { userId: user.id } })).toBe(0);
+    expect(await prisma.uricRecord.count({ where: { userId: user.id } })).toBe(0);
+    expect(await prisma.dailySummary.count({ where: { userId: user.id } })).toBe(0);
+    expect(await prisma.followUp.count({ where: { recordId: glucose.id } })).toBe(0);
+    expect(await prisma.pharmacyAccessLog.count({ where: { userId: user.id } })).toBe(0);
+    expect(await prisma.pharmacyCustomer.count({ where: { userId: user.id } })).toBe(0);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).deactivatedAt).toBeTruthy();
+
+    const staleBinding = await prisma.pharmacyCustomer.create({ data: { pharmacyId, userId: user.id } });
+    await request(app.server).get(`/api/pharmacy/customers/${user.id}`).set('Authorization', `Bearer ${pharmacyToken}`).expect(403);
+    await prisma.pharmacyCustomer.delete({ where: { id: staleBinding.id } });
   });
 });
 
@@ -367,7 +497,7 @@ describe('invites and admin', () => {
     const created = await request(app.server)
       .post('/api/pharmacy/staff')
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ username: 'kn_new_staff', name: '新店员', password: 'Staff@123', role: 'staff' })
+      .send({ username: 'kn_new_staff', name: '新店员', password: 'Staff@123456', role: 'staff' })
       .expect(200);
     expect(created.body.username).toBe('kn_new_staff');
     expect(created.body.disabledAt).toBeNull();
@@ -396,7 +526,7 @@ describe('invites and admin', () => {
     const created = await request(app.server)
       .post('/api/admin/pharmacies')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ name: '新药房', address: '人民路', phone: '123', ownerUsername: 'new_owner', ownerPassword: 'Owner@123' })
+      .send({ name: '新药房', address: '人民路', phone: '123', ownerUsername: 'new_owner', ownerPassword: 'Owner@123456' })
       .expect(200);
     await request(app.server)
       .patch(`/api/admin/pharmacies/${created.body.pharmacy.id}`)
@@ -407,18 +537,47 @@ describe('invites and admin', () => {
 });
 
 describe('wechat code exchange', () => {
+  test('returns web oauth config and exchanges a mock web code for a stable session', async () => {
+    const webConfig = await request(app.server).get('/api/app/auth/wechat-web/config').expect(200);
+    expect(webConfig.body).toEqual({
+      enabled: expect.any(Boolean),
+      appId: expect.any(String),
+      redirectUri: expect.any(String)
+    });
+    expect(webConfig.body.enabled).toBe(Boolean(webConfig.body.appId));
+
+    const first = await request(app.server).post('/api/app/auth/wechat-web').send({ code: 'web-login-code' }).expect(200);
+    expect(first.body.token).toEqual(expect.any(String));
+    expect(first.body.user).not.toHaveProperty('openid');
+    expect(first.body.user).not.toHaveProperty('unionid');
+    await request(app.server).get('/api/app/me').set('Authorization', `Bearer ${first.body.token}`).expect(200);
+
+    const second = await request(app.server).post('/api/app/auth/wechat-web').send({ code: 'web-login-code' }).expect(200);
+    expect(second.body.user.id).toBe(first.body.user.id);
+
+    const mini = await request(app.server).post('/api/app/auth/wechat').send({ code: 'web-login-code' }).expect(200);
+    expect(mini.body.user.id).toBe(first.body.user.id);
+    const stored = await prisma.user.findUniqueOrThrow({ where: { id: first.body.user.id } });
+    expect(stored.miniOpenid).toBe('mock_web-login-code');
+    expect(stored.webOpenid).toBe('mock_web-login-code');
+    expect(stored.unionid).toBe('mock:web-login-code');
+  });
+
   test('exchanges a login code for a stable openid', async () => {
     const fetchMock = (async (input: string | URL | Request) => {
       const url = new URL(String(input));
       expect(url.searchParams.get('appid')).toBe('wx-test');
       expect(url.searchParams.get('secret')).toBe('secret-test');
       expect(url.searchParams.get('js_code')).toBe('login-code');
-      return new Response(JSON.stringify({ openid: 'openid-stable', session_key: 'session-key' }), {
+      return new Response(JSON.stringify({ openid: 'openid-stable', unionid: 'unionid-stable', session_key: 'session-key' }), {
         status: 200,
         headers: { 'content-type': 'application/json' }
       });
     }) as typeof fetch;
-    await expect(exchangeWechatCode('login-code', 'wx-test', 'secret-test', fetchMock)).resolves.toBe('openid-stable');
+    await expect(exchangeWechatCode('login-code', 'wx-test', 'secret-test', fetchMock)).resolves.toEqual({
+      openid: 'openid-stable',
+      unionid: 'unionid-stable'
+    });
   });
 
   test('rejects a wechat API error response', async () => {

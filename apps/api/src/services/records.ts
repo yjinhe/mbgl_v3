@@ -29,6 +29,85 @@ import {
 
 export const METRICS: Metric[] = ['glucose', 'bp', 'lipid', 'uric'];
 
+const GLUCOSE_PERIODS = new Set(['fasting', 'after_breakfast', 'before_lunch', 'after_lunch', 'random', 'before_dinner', 'after_dinner', 'bedtime', 'dawn']);
+const BP_PERIODS = new Set(['morning', 'daytime', 'evening', 'night']);
+const COMMON_RECORD_FIELDS = ['measuredAt', 'note'] as const;
+const METRIC_RECORD_FIELDS: Record<Metric, ReadonlySet<string>> = {
+  glucose: new Set([...COMMON_RECORD_FIELDS, 'value', 'unit', 'period', 'tags']),
+  bp: new Set([...COMMON_RECORD_FIELDS, 'sbp', 'dbp', 'pulse', 'period', 'tags']),
+  lipid: new Set([...COMMON_RECORD_FIELDS, 'tc', 'tg', 'ldl', 'hdl', 'fasting']),
+  uric: new Set([...COMMON_RECORD_FIELDS, 'value', 'fasting'])
+};
+const MAX_NOTE_LENGTH = 50;
+const MAX_TAG_COUNT = 12;
+const MAX_TAG_LENGTH = 32;
+const MAX_TAGS_TOTAL_LENGTH = 256;
+const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
+
+type ValidationResult = { ok: true; valueMmol?: number } | { ok: false; message: string };
+
+function invalid(message: string): ValidationResult {
+  return { ok: false, message };
+}
+
+function isRecordBody(value: unknown): value is Record<string, unknown> {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function hasOnlyAllowedFields(metric: Metric, body: Record<string, unknown>): boolean {
+  return Object.keys(body).every((field) => METRIC_RECORD_FIELDS[metric].has(field));
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isValidIsoDateTime(value: string): boolean {
+  if (!ISO_DATE_TIME.test(value) || Number.isNaN(Date.parse(value))) return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = match[7] === undefined ? 0 : Number(match[7]);
+  const offsetMinute = match[8] === undefined ? 0 : Number(match[8]);
+  return month >= 1 && month <= 12
+    && day >= 1 && day <= new Date(Date.UTC(year, month, 0)).getUTCDate()
+    && hour <= 23 && minute <= 59 && second <= 59
+    && offsetHour <= 23 && offsetMinute <= 59;
+}
+
+function validateCommonRecordFields(body: Record<string, unknown>): ValidationResult {
+  if (body.measuredAt !== undefined && (typeof body.measuredAt !== 'string' || body.measuredAt.length > 40 || !isValidIsoDateTime(body.measuredAt))) {
+    return invalid('测量时间不正确');
+  }
+  if (body.note !== undefined && (typeof body.note !== 'string' || body.note.length > MAX_NOTE_LENGTH)) {
+    return invalid(`备注不能超过 ${MAX_NOTE_LENGTH} 个字符`);
+  }
+  return { ok: true };
+}
+
+function validateTags(tags: unknown): ValidationResult {
+  if (tags === undefined) return { ok: true };
+  if (!Array.isArray(tags) || tags.length > MAX_TAG_COUNT) return invalid('标签格式不正确');
+  let totalLength = 0;
+  const seen = new Set<string>();
+  for (const tag of tags) {
+    if (typeof tag !== 'string' || tag.length === 0 || tag.length > MAX_TAG_LENGTH || tag.trim() !== tag || seen.has(tag)) {
+      return invalid('标签格式不正确');
+    }
+    seen.add(tag);
+    totalLength += tag.length;
+    if (totalLength > MAX_TAGS_TOTAL_LENGTH) return invalid('标签内容过长');
+  }
+  return { ok: true };
+}
+
 export function toNum(value: unknown): number | null {
   if (value == null) return null;
   if (typeof value === 'number') return value;
@@ -187,18 +266,46 @@ export function metricSafety(metric: Metric, body: any): 'low' | 'high' | null {
   return null;
 }
 
-export function validateMetricInput(metric: Metric, body: any, unit: Unit = 'mmol') {
-  if (metric === 'glucose') return validateGlucose(Number(body.value), unit);
-  if (metric === 'bp') return validateBp({ sbp: Number(body.sbp), dbp: Number(body.dbp), pulse: body.pulse == null ? null : Number(body.pulse) });
-  if (metric === 'lipid') {
-    return validateLipid({
-      tc: body.tc == null ? null : Number(body.tc),
-      tg: body.tg == null ? null : Number(body.tg),
-      ldl: body.ldl == null ? null : Number(body.ldl),
-      hdl: body.hdl == null ? null : Number(body.hdl)
-    });
+export function validateMetricInput(metric: Metric, body: unknown, unit: Unit = 'mmol'): ValidationResult {
+  if (!isRecordBody(body) || !hasOnlyAllowedFields(metric, body)) return invalid('请求参数不正确');
+  const common = validateCommonRecordFields(body);
+  if (!common.ok) return common;
+
+  if (metric === 'glucose') {
+    if (!isFiniteNumber(body.value)) return invalid('请输入血糖值');
+    if (body.unit !== undefined && body.unit !== 'mmol' && body.unit !== 'mgdl') return invalid('血糖单位不正确');
+    if (body.period !== undefined && (typeof body.period !== 'string' || !GLUCOSE_PERIODS.has(body.period))) {
+      return invalid('测量时段不正确');
+    }
+    const tags = validateTags(body.tags);
+    if (!tags.ok) return tags;
+    const result = validateGlucose(body.value, unit);
+    return result.ok ? { ok: true, valueMmol: result.valueMmol } : invalid(result.message ?? '请输入血糖值');
   }
-  return validateUric(Number(body.value));
+  if (metric === 'bp') {
+    if (!isFiniteNumber(body.sbp) || !isFiniteNumber(body.dbp)) return invalid('请输入血压值');
+    if (body.pulse !== undefined && body.pulse !== null && !isFiniteNumber(body.pulse)) return invalid('请输入有效范围内的脉搏值');
+    if (body.period !== undefined && (typeof body.period !== 'string' || !BP_PERIODS.has(body.period))) {
+      return invalid('测量时段不正确');
+    }
+    const tags = validateTags(body.tags);
+    if (!tags.ok) return tags;
+    const result = validateBp({ sbp: body.sbp, dbp: body.dbp, pulse: body.pulse == null ? null : body.pulse });
+    return result.ok ? { ok: true } : invalid(result.message ?? '请输入血压值');
+  }
+  if (metric === 'lipid') {
+    if (body.fasting !== undefined && typeof body.fasting !== 'boolean') return invalid('空腹状态不正确');
+    const values = { tc: body.tc, tg: body.tg, ldl: body.ldl, hdl: body.hdl };
+    for (const value of Object.values(values)) {
+      if (value !== undefined && value !== null && !isFiniteNumber(value)) return invalid('血脂数值格式不正确');
+    }
+    const result = validateLipid(values as { tc?: number | null; tg?: number | null; ldl?: number | null; hdl?: number | null });
+    return result.ok ? { ok: true } : invalid(result.message ?? '请至少填写一项血脂指标');
+  }
+  if (!isFiniteNumber(body.value)) return invalid('请输入尿酸值');
+  if (body.fasting !== undefined && typeof body.fasting !== 'boolean') return invalid('空腹状态不正确');
+  const result = validateUric(body.value);
+  return result.ok ? { ok: true } : invalid(result.message ?? '请输入尿酸值');
 }
 
 export async function statsForMetric(prisma: PrismaClient, userId: string, user: any, metric: Metric, range: number) {

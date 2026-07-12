@@ -16,7 +16,10 @@ async function cleanupRecycleBin() {
   }
 }
 
-const cleanupTask = cron.schedule('10 3 * * *', () => void cleanupRecycleBin(), { timezone: 'Asia/Shanghai' });
+const cleanupTask = cron.schedule('10 3 * * *', () => void cleanupRecycleBin(), {
+  timezone: 'Asia/Shanghai',
+  noOverlap: true
+});
 void cleanupRecycleBin();
 
 async function shutdown(signal: string) {

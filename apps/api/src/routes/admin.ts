@@ -1,7 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { requireAuth } from '../plugins/auth.js';
-import { hashPassword, verifyPassword } from '../services/password.js';
+import { requireAuth, type AdminToken } from '../plugins/auth.js';
+import { hashPassword, isStrongPassword, verifyPassword } from '../services/password.js';
+
+const strongPasswordSchema = z.string().min(12).max(128).refine(isStrongPassword, {
+  message: '密码至少 12 位，且需包含大小写字母、数字和符号'
+});
 
 export async function adminRoutes(app: FastifyInstance) {
   app.post('/auth/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
@@ -10,12 +14,29 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!admin || !(await verifyPassword(body.password, admin.passwordHash))) {
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: '用户名或密码不正确' } });
     }
-    return { token: app.jwt.sign({ aud: 'admin', adminId: admin.id }) };
+    return { token: app.jwt.sign({ aud: 'admin', adminId: admin.id, ver: admin.authVersion }) };
   });
 
   app.addHook('preHandler', async (request, reply) => {
     if (request.url.endsWith('/auth/login')) return;
     return requireAuth(request, reply, 'admin');
+  });
+
+  app.post('/auth/change-password', { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } }, async (request, reply) => {
+    const auth = request.auth as AdminToken;
+    const body = z.object({ currentPassword: z.string().min(1).max(128), newPassword: strongPasswordSchema }).parse(request.body);
+    const admin = await app.prisma.adminUser.findUniqueOrThrow({ where: { id: auth.adminId } });
+    if (!(await verifyPassword(body.currentPassword, admin.passwordHash))) {
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: '当前密码不正确' } });
+    }
+    if (await verifyPassword(body.newPassword, admin.passwordHash)) {
+      return reply.code(422).send({ error: { code: 'VALIDATION_FAILED', message: '新密码不能与当前密码相同' } });
+    }
+    await app.prisma.adminUser.update({
+      where: { id: admin.id },
+      data: { passwordHash: await hashPassword(body.newPassword), authVersion: { increment: 1 } }
+    });
+    return reply.code(204).send();
   });
 
   app.get('/stats', async () => {
@@ -47,14 +68,14 @@ export async function adminRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post('/pharmacies', async (request) => {
+  app.post('/pharmacies', { config: { rateLimit: { max: 10, timeWindow: '1 hour' } } }, async (request) => {
     const body = z
       .object({
         name: z.string().trim().min(1).max(80),
         address: z.string().trim().max(200).default(''),
         phone: z.string().trim().max(30).default(''),
         ownerUsername: z.string().trim().min(3).max(80),
-        ownerPassword: z.string().min(8).max(128)
+        ownerPassword: strongPasswordSchema
       })
       .parse(request.body);
     return app.prisma.$transaction(async (tx) => {
@@ -74,9 +95,14 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.patch('/pharmacies/:id', async (request) => {
     const body = z.object({ disabledAt: z.string().datetime().nullable().optional() }).parse(request.body);
-    return app.prisma.pharmacy.update({
-      where: { id: String((request.params as any).id) },
-      data: { disabledAt: body.disabledAt ? new Date(body.disabledAt) : null }
+    const pharmacyId = String((request.params as any).id);
+    return app.prisma.$transaction(async (tx) => {
+      const pharmacy = await tx.pharmacy.update({
+        where: { id: pharmacyId },
+        data: { disabledAt: body.disabledAt ? new Date(body.disabledAt) : null }
+      });
+      await tx.pharmacyStaff.updateMany({ where: { pharmacyId }, data: { authVersion: { increment: 1 } } });
+      return pharmacy;
     });
   });
 }

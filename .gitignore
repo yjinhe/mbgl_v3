@@ -10,8 +10,12 @@ tangji-v3-latest-report/
 !.env.docker.example
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
 test-results/
 playwright-report/
 docs/screenshots/*.png

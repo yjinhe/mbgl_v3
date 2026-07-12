@@ -4,11 +4,14 @@ import { z } from 'zod';
 import { config } from '../env.js';
 import { assertActiveCustomer, requireAuth, requireOwner, type PharmacyToken } from '../plugins/auth.js';
 import { forbidden, notFound, validationError } from '../services/http.js';
-import { hashPassword, verifyPassword } from '../services/password.js';
+import { hashPassword, isStrongPassword, verifyPassword } from '../services/password.js';
 import { METRICS, serializeRecord, statsForMetric } from '../services/records.js';
 import type { Metric } from '@tangji/shared';
 
 const metricSchema = z.enum(['glucose', 'bp', 'lipid', 'uric']);
+const strongPasswordSchema = z.string().min(12).max(128).refine(isStrongPassword, {
+  message: '密码至少 12 位，且需包含大小写字母、数字和符号'
+});
 const publicStaffSelect = {
   id: true,
   pharmacyId: true,
@@ -30,7 +33,8 @@ export async function pharmacyRoutes(app: FastifyInstance) {
       aud: 'pharmacy',
       staffId: staff.id,
       pharmacyId: staff.pharmacyId,
-      role: staff.role
+      role: staff.role,
+      ver: staff.authVersion
     });
     return { token, staff: { name: staff.name, role: staff.role }, pharmacy: { name: staff.pharmacy.name } };
   });
@@ -40,10 +44,27 @@ export async function pharmacyRoutes(app: FastifyInstance) {
     return requireAuth(request, reply, 'pharmacy');
   });
 
+  app.post('/auth/change-password', { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } }, async (request, reply) => {
+    const auth = request.auth as PharmacyToken;
+    const body = z.object({ currentPassword: z.string().min(1).max(128), newPassword: strongPasswordSchema }).parse(request.body);
+    const staff = await app.prisma.pharmacyStaff.findUniqueOrThrow({ where: { id: auth.staffId } });
+    if (!(await verifyPassword(body.currentPassword, staff.passwordHash))) {
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: '当前密码不正确' } });
+    }
+    if (await verifyPassword(body.newPassword, staff.passwordHash)) {
+      return reply.code(422).send({ error: { code: 'VALIDATION_FAILED', message: '新密码不能与当前密码相同' } });
+    }
+    await app.prisma.pharmacyStaff.update({
+      where: { id: staff.id },
+      data: { passwordHash: await hashPassword(body.newPassword), authVersion: { increment: 1 } }
+    });
+    return reply.code(204).send();
+  });
+
   app.get('/dashboard', async (request) => {
     const auth = request.auth as PharmacyToken;
     const activeBindings = await app.prisma.pharmacyCustomer.findMany({
-      where: { pharmacyId: auth.pharmacyId, unboundAt: null },
+      where: { pharmacyId: auth.pharmacyId, unboundAt: null, user: { deactivatedAt: null } },
       include: { user: true, inviteCode: true }
     });
     const alerts = await alertsForPharmacy(app, auth.pharmacyId, 7);
@@ -66,7 +87,7 @@ export async function pharmacyRoutes(app: FastifyInstance) {
     const auth = request.auth as PharmacyToken;
     const query = z.object({ search: z.string().optional(), filter: z.enum(['all', 'alert', 'inactive7d']).default('all') }).parse(request.query);
     const bindings = await app.prisma.pharmacyCustomer.findMany({
-      where: { pharmacyId: auth.pharmacyId, unboundAt: null },
+      where: { pharmacyId: auth.pharmacyId, unboundAt: null, user: { deactivatedAt: null } },
       include: { user: true },
       orderBy: { consentAt: 'desc' }
     });
@@ -250,7 +271,7 @@ export async function pharmacyRoutes(app: FastifyInstance) {
     const body = z.object({
       username: z.string().trim().min(3).max(80),
       name: z.string().trim().min(1).max(40),
-      password: z.string().min(8).max(128),
+      password: strongPasswordSchema,
       role: z.enum(['owner', 'staff']).default('staff')
     }).parse(request.body);
     return app.prisma.pharmacyStaff.create({
@@ -268,7 +289,7 @@ export async function pharmacyRoutes(app: FastifyInstance) {
     if (!staff) return notFound(reply, '员工不存在');
     return app.prisma.pharmacyStaff.update({
       where: { id: staff.id },
-      data: { disabledAt: body.disabledAt ? new Date(body.disabledAt) : null },
+      data: { disabledAt: body.disabledAt ? new Date(body.disabledAt) : null, authVersion: { increment: 1 } },
       select: publicStaffSelect
     });
   });
@@ -310,7 +331,10 @@ async function recordsForMetricRaw(app: FastifyInstance, metric: Metric, where: 
 
 async function alertsForPharmacy(app: FastifyInstance, pharmacyId: string, days: number) {
   const since = new Date(Date.now() - days * 86400000);
-  const bindings = await app.prisma.pharmacyCustomer.findMany({ where: { pharmacyId, unboundAt: null }, include: { user: true } });
+  const bindings = await app.prisma.pharmacyCustomer.findMany({
+    where: { pharmacyId, unboundAt: null, user: { deactivatedAt: null } },
+    include: { user: true }
+  });
   if (bindings.length === 0) return [];
   const userIds = bindings.map((binding) => binding.userId);
   const users = new Map(bindings.map((binding) => [binding.userId, binding.user]));

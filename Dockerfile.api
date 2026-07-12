@@ -1,4 +1,8 @@
-FROM node:20-bookworm-slim
+ARG NODE_VERSION=22-bookworm-slim
+FROM node:${NODE_VERSION}
+
+ARG APP_VERSION=0.1.0
+ARG BUILD_SHA=unknown
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -6,7 +10,7 @@ ENV PATH="$PNPM_HOME:$PATH"
 WORKDIR /app
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates gosu \
+  && apt-get install -y --no-install-recommends ca-certificates gosu openssl sqlite3 \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable \
   && corepack prepare pnpm@10.33.1 --activate
@@ -19,13 +23,20 @@ RUN pnpm install --frozen-lockfile
 
 COPY packages/shared packages/shared
 COPY apps/api apps/api
-COPY docker/api-entrypoint.sh docker/api-entrypoint.sh
+COPY --chmod=755 docker/api-entrypoint.sh docker/api-entrypoint.sh
+COPY --chmod=755 docker/migration-preflight.sh docker/migration-preflight.sh
 
 RUN pnpm --filter @tangji/shared build \
   && pnpm --filter @tangji/api build \
-  && chmod +x docker/api-entrypoint.sh \
   && mkdir -p /data \
   && chown -R node:node /app /data
+
+LABEL org.opencontainers.image.title="Tangji API" \
+  org.opencontainers.image.version="${APP_VERSION}" \
+  org.opencontainers.image.revision="${BUILD_SHA}"
+
+ENV APP_VERSION="${APP_VERSION}" \
+  BUILD_SHA="${BUILD_SHA}"
 
 EXPOSE 3001
 

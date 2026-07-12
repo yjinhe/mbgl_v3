@@ -16,6 +16,7 @@ Page({
     sexFemaleClass: '',
     unitMmolClass: 'on',
     unitMgdlClass: '',
+    deletingAccount: false,
     navStyle: ''
   },
 
@@ -90,6 +91,50 @@ Page({
 
   logout() {
     logoutToLogin(this);
+  },
+
+  deleteAccount() {
+    if (this.data.deletingAccount) return;
+
+    const totalRecords = Number(this.data.me && this.data.me.stats && this.data.me.stats.totalRecords);
+    const recordCount = Number.isFinite(totalRecords) ? totalRecords : 0;
+    this.setData({ deletingAccount: true });
+
+    wx.showModal({
+      title: '注销并删除全部数据？',
+      content: `将删除账号下全部 ${recordCount} 条健康记录及关联数据（四类指标合计），该操作不可恢复。如需留底，请先导出数据。`,
+      cancelText: '再想想',
+      confirmText: '确认注销',
+      confirmColor: '#D6453D',
+      success: async (res) => {
+        if (!res.confirm) {
+          this.setData({ deletingAccount: false });
+          return;
+        }
+
+        try {
+          await request('/api/app/me', { method: 'DELETE' });
+          logoutToLogin(this);
+          this.setData({ deletingAccount: false });
+          wx.showToast({ title: '账号已注销', icon: 'none' });
+          wx.reLaunch({ url: '/pages/home/index' });
+        } catch (error) {
+          this.setData({ deletingAccount: false });
+          wx.showModal({
+            title: '注销失败',
+            content: error && error.message
+              ? `未能注销账号：${error.message}`
+              : '未能注销账号，请检查网络后重试。',
+            showCancel: false,
+            confirmText: '知道了'
+          });
+        }
+      },
+      fail: () => {
+        this.setData({ deletingAccount: false });
+        wx.showToast({ title: '无法打开注销确认，请稍后重试', icon: 'none' });
+      }
+    });
   },
 
   switchPage(event) {

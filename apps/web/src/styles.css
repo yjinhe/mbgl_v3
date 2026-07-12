@@ -18,6 +18,29 @@
   box-shadow: var(--shadow-card);
 }
 
+.login-card .btn:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+  box-shadow: none;
+}
+
+.login-message {
+  margin-top: 12px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.login-message.error {
+  color: var(--danger);
+}
+
+.danger-copy,
+.m-acts .danger-action {
+  color: var(--danger);
+}
+
 .micon {
   width: 18px;
   height: 18px;

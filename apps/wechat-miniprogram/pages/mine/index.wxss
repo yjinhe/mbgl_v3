@@ -118,3 +118,7 @@
   color: var(--danger);
   font-weight: 750;
 }
+
+.account-delete.disabled {
+  opacity: .55;
+}

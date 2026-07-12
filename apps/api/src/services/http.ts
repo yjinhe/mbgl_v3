@@ -12,6 +12,6 @@ export function notFound(reply: FastifyReply, message = 'NOT_FOUND') {
   return reply.code(404).send({ error: { code: 'NOT_FOUND', message } });
 }
 
-export function conflict(reply: FastifyReply, message = 'CONFLICT') {
-  return reply.code(409).send({ error: { code: 'CONFLICT', message } });
+export function conflict(reply: FastifyReply, code = 'CONFLICT', message = code) {
+  return reply.code(409).send({ error: { code, message } });
 }

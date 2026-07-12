@@ -10,6 +10,9 @@ datasource db {
 model User {
   id           String    @id @default(cuid())
   openid       String    @unique
+  miniOpenid   String?   @unique
+  webOpenid    String?   @unique
+  unionid      String?   @unique
   nickname     String    @default("微信用户")
   sex          String?
   unit         String    @default("mmol")
@@ -128,6 +131,7 @@ model PharmacyStaff {
   passwordHash String
   name         String
   role         String   @default("staff")
+  authVersion  Int      @default(0)
   disabledAt   DateTime?
   createdAt    DateTime @default(now())
 }
@@ -157,6 +161,7 @@ model PharmacyCustomer {
 
   @@index([pharmacyId, unboundAt])
   @@index([userId, unboundAt])
+  // SQLite partial unique index for active bindings is maintained by migrations.
 }
 
 model FollowUp {
@@ -186,5 +191,6 @@ model AdminUser {
   id           String   @id @default(cuid())
   username     String   @unique
   passwordHash String
+  authVersion  Int      @default(0)
   createdAt    DateTime @default(now())
 }

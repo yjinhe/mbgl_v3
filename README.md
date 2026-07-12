@@ -31,6 +31,9 @@ pnpm dev
 
 - 只部署 API：见 `docs/DOCKER-API-DEPLOY.md`
 - 统一部署 API + C 端 Web + 药房后台：见 `docs/DOCKER-FULL-DEPLOY.md`
+- 版本发布、旧库 migration、备份、恢复与回滚：见 `docs/DOCKER-OPERATIONS.md`
+
+生产发布统一使用不可变镜像标签，例如 `docker/release.sh v1.0.0`。脚本会在更新前备份 SQLite，并在 migration 和服务健康检查全部通过后完成发布；不要使用 `latest` 或执行 `docker compose down -v`。
 
 ## 3 分钟演示路径
 

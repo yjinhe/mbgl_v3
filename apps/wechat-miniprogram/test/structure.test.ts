@@ -55,6 +55,24 @@ describe('wechat miniprogram structure', () => {
     expect(mineWxml).toContain('回收站');
   });
 
+  test('keeps logout separate from irreversible account deletion', () => {
+    const mineJs = fs.readFileSync(path.join(root, 'pages/mine/index.js'), 'utf8');
+    const mineWxml = fs.readFileSync(path.join(root, 'pages/mine/index.wxml'), 'utf8');
+
+    expect(mineWxml).toContain('退出登录');
+    expect(mineWxml).toContain('仅清除本机登录状态');
+    expect(mineWxml).toContain('注销账号');
+    expect(mineWxml).toContain('永久删除账号及全部关联数据');
+    expect(mineJs).toContain("request('/api/app/me', { method: 'DELETE' })");
+    expect(mineJs).toContain('me.stats.totalRecords');
+    expect(mineJs).toContain('四类指标合计');
+    expect(mineJs).toContain('该操作不可恢复');
+    expect(mineJs).toContain('如需留底，请先导出数据');
+    expect(mineJs).toContain("cancelText: '再想想'");
+    expect(mineJs).toContain("confirmText: '确认注销'");
+    expect(mineJs).toContain("wx.reLaunch({ url: '/pages/home/index' })");
+  });
+
   test('uses a mini-program-safe Web-like shell without fake status or capsule chrome', () => {
     const appWxss = fs.readFileSync(path.join(root, 'app.wxss'), 'utf8');
     const homeWxml = fs.readFileSync(path.join(root, 'pages/home/index.wxml'), 'utf8');

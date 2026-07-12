@@ -40,6 +40,7 @@
           <view class="card cell-card">
             <view class="cell" bindtap="goRecycle"><view class="cm"><view class="ct">回收站</view><view class="cs">删除的记录保留 7 天</view></view><view class="cv">›</view></view>
             <view class="cell" bindtap="logout"><view class="cm"><view class="ct">退出登录</view><view class="cs">仅清除本机登录状态</view></view></view>
+            <view class="cell account-delete {{deletingAccount ? 'disabled' : ''}}" bindtap="deleteAccount"><view class="cm"><view class="ct danger-text">{{deletingAccount ? '正在注销…' : '注销账号'}}</view><view class="cs">永久删除账号及全部关联数据</view></view></view>
           </view>
           <view class="foot-note">糖迹仅作记录工具，不提供诊断与用药建议，请遵医嘱</view>
         </block>

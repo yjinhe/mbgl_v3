@@ -55,3 +55,140 @@
   gap: 10px;
   align-items: center;
 }
+
+.bme-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.bbtn:disabled,
+.blogin .btn:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.blogin .btn {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  padding: 11px 13px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.blogin .btn.primary {
+  background: var(--brand);
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(14, 126, 107, .24);
+}
+
+.login-notice {
+  margin: 0 0 12px;
+  border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
+  border-radius: 9px;
+  background: var(--ok-soft);
+  color: var(--brand-deep);
+  padding: 8px 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.session-check {
+  color: var(--ink-3);
+  font-size: 14px;
+  text-align: center;
+}
+
+.form-error {
+  margin-top: 9px;
+  color: var(--danger);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.password-form,
+.pharmacy-form {
+  display: grid;
+  gap: 12px;
+}
+
+.pharmacy-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.form-field.full {
+  grid-column: 1 / -1;
+}
+
+.form-field .bsearch {
+  width: 100%;
+  min-width: 0;
+  flex: none;
+}
+
+.password-row {
+  display: flex;
+  gap: 8px;
+}
+
+.password-row .bsearch {
+  flex: 1;
+}
+
+.password-row .bbtn {
+  flex: none;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.credential-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent);
+  border-radius: 12px;
+  background: var(--ok-soft);
+  padding: 12px 15px;
+  color: var(--brand-deep);
+  font-size: 12px;
+}
+
+.credential-note div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.credential-note code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .pharmacy-form {
+    grid-template-columns: 1fr;
+  }
+
+  .form-field.full {
+    grid-column: auto;
+  }
+}
