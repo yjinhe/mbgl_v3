@@ -35,7 +35,7 @@ docker/release.sh v1.0.0
 RELEASE_VALIDATE_ONLY=true docker/release.sh v1.0.0
 ```
 
-全栈配置闸门会额外要求微信 Web AppID/Secret、HTTPS 回调、回调与 `APP_ORIGIN` 同源，并确认 `WEB_ORIGIN` 包含该来源；API-only Compose 不要求微信 Web 凭据。
+全栈配置闸门会要求 `APP_ORIGIN` 使用 HTTPS，并确认 `WEB_ORIGIN` 包含该来源。微信 Web AppID/Secret 为可选配置；启用微信网页授权时两项必须同时填写，回调地址必须与 `APP_ORIGIN` 同源。API-only Compose 不校验微信网页授权配置。
 
 使用镜像仓库时，在 `.env.docker` 设置完整仓库名：
 

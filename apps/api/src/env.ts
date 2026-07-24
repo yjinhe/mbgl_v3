@@ -36,8 +36,8 @@ if (isProduction && (jwtSecret.includes('change-me') || jwtSecret.length < 32)) 
 if (isProduction && wechatMock) {
   throw new Error('WECHAT_MOCK must be false in production');
 }
-if (!wechatMock && (!wechatAppId || !wechatSecret)) {
-  throw new Error('WECHAT_APPID and WECHAT_SECRET are required when WECHAT_MOCK=false');
+if (Boolean(wechatAppId) !== Boolean(wechatSecret)) {
+  throw new Error('WECHAT_APPID and WECHAT_SECRET must be configured together');
 }
 if (Boolean(wechatWebAppId) !== Boolean(wechatWebSecret)) {
   throw new Error('WECHAT_WEB_APPID and WECHAT_WEB_SECRET must be configured together');

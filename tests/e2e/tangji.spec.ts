@@ -6,6 +6,26 @@ test('C端登录后显示血糖首页', async ({ page }) => {
   await expect(page.getByText('血糖 · 最近一次')).toBeVisible();
 });
 
+test('手机网页可注册、退出并使用账号密码登录', async ({ page }) => {
+  const loginName = `web_${Date.now().toString(36)}`;
+  const password = 'Web@Account123';
+  await page.goto('/');
+  await page.getByRole('tab', { name: '注册' }).click();
+  await page.getByLabel('账号', { exact: true }).fill(loginName);
+  await page.getByLabel('昵称', { exact: true }).fill('网页测试用户');
+  await page.getByLabel('密码', { exact: true }).fill(password);
+  await page.getByLabel('确认密码', { exact: true }).fill(password);
+  await page.getByRole('button', { name: '创建账号' }).click();
+  await expect(page.locator('.tabbar')).toBeVisible();
+
+  await page.locator('.tab').filter({ hasText: '我的' }).click();
+  await page.getByRole('button', { name: /退出登录/ }).click();
+  await page.getByLabel('账号', { exact: true }).fill(loginName);
+  await page.getByLabel('密码', { exact: true }).fill(password);
+  await page.locator('.auth-submit').click();
+  await expect(page.locator('.tabbar')).toBeVisible();
+});
+
 test('C端可打开录入弹层并显示血压面板', async ({ page }) => {
   await page.goto('/');
   await page.getByText('微信一键登录').click();

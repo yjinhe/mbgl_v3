@@ -28,8 +28,10 @@ validate_release_env() {
     echo "WECHAT_MOCK must be false for a release." >&2
     exit 1
   fi
-  if [ -z "$(dotenv_value WECHAT_APPID)" ] || [ -z "$(dotenv_value WECHAT_SECRET)" ]; then
-    echo "WECHAT_APPID and WECHAT_SECRET are required for a release." >&2
+  mini_app_id="$(dotenv_value WECHAT_APPID)"
+  mini_secret="$(dotenv_value WECHAT_SECRET)"
+  if { [ -z "$mini_app_id" ] && [ -n "$mini_secret" ]; } || { [ -n "$mini_app_id" ] && [ -z "$mini_secret" ]; }; then
+    echo "WECHAT_APPID and WECHAT_SECRET must either both be set or both be empty." >&2
     exit 1
   fi
   if [ "${#jwt_secret}" -lt 32 ] || printf '%s' "$jwt_secret" | grep -q 'change-me'; then
@@ -48,8 +50,8 @@ validate_release_env() {
     app_origin="$(dotenv_value APP_ORIGIN)"
     web_origins="$(dotenv_value WEB_ORIGIN)"
 
-    if [ -z "$web_app_id" ] || [ -z "$web_secret" ]; then
-      echo "Full-stack releases require WECHAT_WEB_APPID and WECHAT_WEB_SECRET." >&2
+    if { [ -z "$web_app_id" ] && [ -n "$web_secret" ]; } || { [ -n "$web_app_id" ] && [ -z "$web_secret" ]; }; then
+      echo "WECHAT_WEB_APPID and WECHAT_WEB_SECRET must either both be set or both be empty." >&2
       exit 1
     fi
     app_origin="${app_origin%/}"
@@ -61,10 +63,12 @@ validate_release_env() {
     case "$origin_authority" in
       ''|*/*|*\?*|*\#*) echo "APP_ORIGIN must contain only scheme and authority, without a path, query, or fragment." >&2; exit 1 ;;
     esac
-    case "$redirect_uri" in
-      "$app_origin"|"$app_origin"/*) ;;
-      *) echo "WECHAT_WEB_REDIRECT_URI must use HTTPS and have the same origin as APP_ORIGIN." >&2; exit 1 ;;
-    esac
+    if [ -n "$web_app_id" ]; then
+      case "$redirect_uri" in
+        "$app_origin"|"$app_origin"/*) ;;
+        *) echo "WECHAT_WEB_REDIRECT_URI must use HTTPS and have the same origin as APP_ORIGIN." >&2; exit 1 ;;
+      esac
+    fi
     if ! printf '%s' "$web_origins" | tr ',' '\n' | awk -v expected="$app_origin" '
       { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0); if ($0 == expected) found = 1 }
       END { exit(found ? 0 : 1) }

@@ -11,11 +11,149 @@
 }
 
 .login-card {
-  width: 330px;
+  width: min(100%, 344px);
   background: var(--card);
   border-radius: 20px;
-  padding: 28px 26px 24px;
+  padding: 24px 22px 20px;
   box-shadow: var(--shadow-card);
+}
+
+.auth-screen {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 20px;
+}
+
+.auth-brand .avatar {
+  width: 50px;
+  height: 50px;
+}
+
+.auth-name {
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.auth-slogan {
+  margin-top: 4px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  margin-bottom: 17px;
+  border-radius: 11px;
+  background: #E8EEEB;
+}
+
+.auth-tabs button {
+  min-height: 36px;
+  border-radius: 9px;
+  color: var(--ink-3);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.auth-tabs button.on {
+  color: var(--ink);
+  background: var(--card);
+  box-shadow: 0 1px 4px rgba(22, 48, 43, .12);
+}
+
+.auth-form,
+.security-form {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-field {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-field > span {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.auth-field input {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  font-size: 14px;
+  letter-spacing: 0;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.auth-field input:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+.auth-field input::placeholder {
+  color: #9AA7A3;
+  font-size: 12px;
+}
+
+.auth-feedback {
+  padding: 9px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.auth-feedback.error {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.auth-feedback.success {
+  color: var(--brand-deep);
+  background: var(--brand-soft);
+}
+
+.auth-submit {
+  margin-top: 2px;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 17px 0 12px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+}
+
+.wechat-login {
+  padding: 12px;
+  font-size: 14px;
 }
 
 .login-card .btn:disabled {
@@ -34,6 +172,47 @@
 
 .login-message.error {
   color: var(--danger);
+}
+
+.account-card {
+  padding: 4px 16px;
+}
+
+.account-cell {
+  width: 100%;
+  text-align: left;
+}
+
+.security-body {
+  padding-top: 14px;
+}
+
+.account-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 14px 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.account-summary strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.security-form {
+  padding: 17px 16px;
+  border-radius: var(--r-card);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
 }
 
 .danger-copy,
@@ -93,4 +272,16 @@
 
 .sheet:not(.on) {
   height: 450px;
+}
+
+@media (max-width: 480px) {
+  .app-stage {
+    padding: 0;
+  }
+}
+
+@media (max-height: 700px) {
+  .auth-screen {
+    justify-content: flex-start;
+  }
 }

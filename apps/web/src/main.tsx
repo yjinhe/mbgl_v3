@@ -23,12 +23,13 @@ const WECHAT_WEB_RETURN_KEY = 'tangji_wechat_web_oauth_return';
 const WECHAT_WEB_APPID = String(import.meta.env.VITE_WECHAT_WEB_APPID || '').trim();
 
 type Tab = 'home' | 'history' | 'stats' | 'mine';
-type Sub = 'bind' | 'recycle' | 'report' | null;
+type Sub = 'bind' | 'recycle' | 'report' | 'security' | null;
 type ExportMetric = Metric | 'all';
 type Status = { key: string; label: string };
 type RecordAny = any;
 type WechatWebConfig = { enabled: boolean; appId: string; redirectUri?: string };
 type AuthPhase = 'loading' | 'ready' | 'exchanging' | 'redirecting' | 'disabled' | 'error';
+type AuthMode = 'login' | 'register';
 
 const metrics: Array<{ k: Metric; n: string; u: string; c: string; soft: string }> = [
   { k: 'glucose', n: '血糖', u: 'mmol/L', c: 'var(--m-glucose)', soft: 'var(--m-glucose-soft)' },
@@ -249,11 +250,103 @@ function toLocalInput(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+function isStrongLocalPassword(password: string) {
+  return password.length >= 12 && password.length <= 128 && /[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
+}
+
+function AuthPanel({ acceptLogin, authPhase, authMessage, loginWithWechat, notice, clearNotice }: any) {
+  const [mode, setMode] = useState<AuthMode>('login');
+  const [loginName, setLoginName] = useState('');
+  const [nickname, setNickname] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const showWechat = import.meta.env.DEV || authPhase !== 'disabled';
+
+  function switchMode(next: AuthMode) {
+    setMode(next);
+    setError('');
+    setPassword('');
+    setConfirmPassword('');
+  }
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const account = loginName.trim();
+    clearNotice();
+    setError('');
+    if (!/^[A-Za-z0-9_.-]{4,32}$/.test(account)) {
+      setError('账号需为 4–32 位字母、数字或 _ . -');
+      return;
+    }
+    if (mode === 'register' && !nickname.trim()) {
+      setError('请填写昵称');
+      return;
+    }
+    if (mode === 'register' && !isStrongLocalPassword(password)) {
+      setError('密码至少 12 位，且需包含大小写字母、数字和符号');
+      return;
+    }
+    if (mode === 'register' && password !== confirmPassword) {
+      setError('两次输入的密码不一致');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await api(`/api/app/auth/${mode}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          loginName: account,
+          password,
+          ...(mode === 'register' ? { nickname: nickname.trim() } : {})
+        })
+      });
+      acceptLogin(res);
+    } catch (submitError: any) {
+      setError(submitError.message || (mode === 'register' ? '注册失败，请稍后重试' : '登录失败，请稍后重试'));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="login-card">
+      <div className="auth-brand">
+        <div className="avatar"><DropIcon color="#fff" /></div>
+        <div><div className="auth-name">糖迹</div><div className="auth-slogan">随时记录你的健康数据</div></div>
+      </div>
+      <div className="auth-tabs" role="tablist" aria-label="账号入口">
+        <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'on' : ''} onClick={() => switchMode('login')}>登录</button>
+        <button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'on' : ''} onClick={() => switchMode('register')}>注册</button>
+      </div>
+      <form className="auth-form" onSubmit={submit}>
+        <label className="auth-field" htmlFor="login-name"><span>账号</span><input id="login-name" name="username" value={loginName} onChange={(event) => setLoginName(event.target.value)} autoComplete="username" placeholder="4–32 位字母或数字" maxLength={32} /></label>
+        {mode === 'register' && <label className="auth-field" htmlFor="nickname"><span>昵称</span><input id="nickname" value={nickname} onChange={(event) => setNickname(event.target.value)} autoComplete="nickname" placeholder="怎么称呼你" maxLength={30} /></label>}
+        <label className="auth-field" htmlFor="password"><span>密码</span><input id="password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === 'register' ? 'new-password' : 'current-password'} placeholder={mode === 'register' ? '至少 12 位，含大小写、数字和符号' : '输入密码'} maxLength={128} /></label>
+        {mode === 'register' && <label className="auth-field" htmlFor="confirm-password"><span>确认密码</span><input id="confirm-password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" placeholder="再次输入密码" maxLength={128} /></label>}
+        {(error || notice) && <div className={`auth-feedback ${error ? 'error' : 'success'}`} role={error ? 'alert' : 'status'}>{error || notice}</div>}
+        <button className="btn primary auth-submit" type="submit" disabled={submitting}>{submitting ? (mode === 'register' ? '正在创建账号…' : '正在登录…') : (mode === 'register' ? '创建账号' : '登录')}</button>
+      </form>
+      {showWechat && (
+        <>
+          <div className="auth-divider"><span>其他登录方式</span></div>
+          <button className="btn line wechat-login" type="button" disabled={authPhase === 'loading' || authPhase === 'exchanging' || authPhase === 'redirecting'} onClick={loginWithWechat}>
+            {authPhase === 'exchanging' ? '正在登录…' : authPhase === 'redirecting' ? '正在前往微信…' : authPhase === 'error' ? '重试微信登录' : '微信一键登录'}
+          </button>
+          {authMessage && <div className={`login-message ${authPhase === 'error' ? 'error' : ''}`} role={authPhase === 'error' ? 'alert' : 'status'}>{authMessage}</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [token, setToken] = useState(getToken());
   const [webAuthConfig, setWebAuthConfig] = useState<WechatWebConfig | null>(null);
   const [authPhase, setAuthPhase] = useState<AuthPhase>(import.meta.env.DEV ? 'ready' : 'loading');
   const [authMessage, setAuthMessage] = useState('');
+  const [authNotice, setAuthNotice] = useState('');
   const [tab, setTab] = useState<Tab>('home');
   const [me, setMe] = useState<any>(null);
   const [overview, setOverview] = useState<any>(null);
@@ -270,27 +363,33 @@ function App() {
 
   function acceptLogin(res: any) {
     localStorage.setItem('tangji_app_token', res.token);
+    setAuthNotice('');
     setToken(res.token);
+  }
+
+  function clearAppSession() {
+    localStorage.removeItem('tangji_app_token');
+    sessionStorage.removeItem(WECHAT_WEB_STATE_KEY);
+    sessionStorage.removeItem(WECHAT_WEB_RETURN_KEY);
+    setMe(null);
+    setOverview(null);
+    setRecords({ glucose: [], bp: [], lipid: [], uric: [] });
+    setTab('home');
+    setSub(null);
+    setToken('');
   }
 
   async function deactivateAccount() {
     try {
       await api('/api/app/me', { method: 'DELETE' });
-      localStorage.removeItem('tangji_app_token');
-      sessionStorage.removeItem(WECHAT_WEB_STATE_KEY);
-      sessionStorage.removeItem(WECHAT_WEB_RETURN_KEY);
-      setMe(null);
-      setOverview(null);
-      setRecords({ glucose: [], bp: [], lipid: [], uric: [] });
-      setSub(null);
-      setToken('');
+      clearAppSession();
     } catch (error: any) {
       if (!getToken()) setToken('');
       showToast(error.message || '注销失败，请稍后重试');
     }
   }
 
-  async function login() {
+  async function loginWithWechat() {
     if (authPhase === 'loading' || authPhase === 'exchanging' || authPhase === 'redirecting' || authPhase === 'disabled') return;
     setAuthMessage('');
     try {
@@ -439,17 +538,8 @@ function App() {
     return (
       <div className="app-stage">
         <div className="device">
-          <div className="screen" style={{ justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-            <div className="login-card">
-              <div className="me-head" style={{ padding: 0, marginBottom: 18 }}>
-                <div className="avatar"><DropIcon color="#fff" /></div>
-                <div><div className="n">糖迹</div><div className="d">5 秒记一次健康数据</div></div>
-              </div>
-              <button className="btn primary" disabled={authPhase === 'loading' || authPhase === 'exchanging' || authPhase === 'redirecting' || authPhase === 'disabled'} onClick={login}>
-                {authPhase === 'loading' ? '正在检查登录环境…' : authPhase === 'exchanging' ? '正在登录…' : authPhase === 'redirecting' ? '正在前往微信…' : authPhase === 'error' ? '重试微信登录' : '微信一键登录'}
-              </button>
-              {authMessage && <div className={`login-message ${authPhase === 'error' ? 'error' : ''}`} role={authPhase === 'error' ? 'alert' : 'status'}>{authMessage}</div>}
-            </div>
+          <div className="screen auth-screen">
+            <AuthPanel acceptLogin={acceptLogin} authPhase={authPhase} authMessage={authMessage} loginWithWechat={loginWithWechat} notice={authNotice} clearNotice={() => setAuthNotice('')} />
           </div>
         </div>
       </div>
@@ -466,10 +556,11 @@ function App() {
             <section className={`page ${tab === 'home' ? 'on' : ''}`}><Home overview={overview} me={me} setTab={setTab} setStatMetric={setStatMetric} /></section>
             <section className={`page ${tab === 'history' ? 'on' : ''}`}><History records={records} metric={histMetric} setMetric={setHistMetric} openRecord={(metric: Metric, record: any) => setRecordAction({ metric, record })} /></section>
             <section className={`page ${tab === 'stats' ? 'on' : ''}`}><Stats records={records} metric={statMetric} setMetric={setStatMetric} me={me} openReport={() => setSub('report')} /></section>
-            <section className={`page ${tab === 'mine' ? 'on' : ''}`}><Mine me={me} refresh={refresh} showToast={showToast} openBind={() => setSub('bind')} openRecycle={() => setSub('recycle')} openExport={() => setExportSheet(true)} deactivateAccount={deactivateAccount} setModal={setModal} /></section>
+            <section className={`page ${tab === 'mine' ? 'on' : ''}`}><Mine me={me} refresh={refresh} showToast={showToast} openBind={() => setSub('bind')} openRecycle={() => setSub('recycle')} openExport={() => setExportSheet(true)} openSecurity={() => setSub('security')} logout={clearAppSession} deactivateAccount={deactivateAccount} setModal={setModal} /></section>
             {sub === 'bind' && <BindSub close={() => setSub(null)} refresh={refresh} showToast={showToast} setModal={setModal} />}
             {sub === 'report' && <ReportSub close={() => setSub(null)} showToast={showToast} openExport={() => setExportSheet(true)} />}
             {sub === 'recycle' && <RecycleSub close={() => setSub(null)} refresh={refresh} showToast={showToast} />}
+            {sub === 'security' && <AccountSecuritySub me={me} close={() => setSub(null)} onComplete={() => { setAuthNotice('密码已修改，请使用新密码重新登录'); clearAppSession(); }} />}
           </div>
           <TabBar tab={tab} setTab={setTab} openSheet={() => { setMetric(metric); setSheetOpen(true); }} />
           <div className={`mask ${sheetOpen || modal || exportSheet || recordAction ? 'on' : ''}`} onClick={() => { setSheetOpen(false); setModal(null); setExportSheet(false); setRecordAction(null); }} />
@@ -632,7 +723,7 @@ function MiniTrend({ records, metric }: any) {
   })}</div>;
 }
 
-function Mine({ me, refresh, showToast, openBind, openRecycle, openExport, deactivateAccount, setModal }: any) {
+function Mine({ me, refresh, showToast, openBind, openRecycle, openExport, openSecurity, logout, deactivateAccount, setModal }: any) {
   async function patch(data: any) {
     await api('/api/app/me', { method: 'PATCH', body: JSON.stringify(data) });
     await refresh();
@@ -665,6 +756,12 @@ function Mine({ me, refresh, showToast, openBind, openRecycle, openExport, deact
   return (
     <>
       <div className="me-head"><div className="avatar"><DropIcon color="#fff" /></div><div><div className="n">{me?.nickname}</div><div className="d">已记录 {me?.stats?.totalRecords ?? 0} 条 · 覆盖 {me?.stats?.coveredDays ?? 0} 天</div></div></div>
+      <div className="sec-label">账号</div>
+      <div className="card account-card">
+        {me?.hasPassword && <button className="cell account-cell" onClick={openSecurity}><div className="cm"><div className="ct">账号与安全</div><div className="cs">{me.loginName} · 修改登录密码</div></div><span className="cv">›</span></button>}
+        {!me?.hasPassword && <div className="cell"><div className="cm"><div className="ct">微信登录</div><div className="cs">当前账号通过微信身份登录</div></div></div>}
+        <button className="cell account-cell" onClick={logout}><div className="cm"><div className="ct">退出登录</div><div className="cs">仅退出当前设备，不会删除数据</div></div><span className="cv">›</span></button>
+      </div>
       <div className="sec-label">健康档案</div>
       <div className="card" style={{ padding: '4px 16px' }}>
         <div className="cell"><div className="cm"><div className="ct">性别</div><div className="cs">影响尿酸参考上限</div></div><div className="seg"><button className={me?.sex === 'male' ? 'on' : ''} onClick={() => patch({ sex: 'male' }).then(() => showToast('已更新性别 · 尿酸参考上限按 <420 计算'))}>男</button><button className={me?.sex === 'female' ? 'on' : ''} onClick={() => patch({ sex: 'female' }).then(() => showToast('已更新性别 · 尿酸参考上限按 <360 计算'))}>女</button></div></div>
@@ -680,6 +777,59 @@ function Mine({ me, refresh, showToast, openBind, openRecycle, openExport, deact
       </div>
       <div className="foot-note">糖迹仅作记录工具，不提供诊断与用药建议，请遵医嘱</div>
     </>
+  );
+}
+
+function AccountSecuritySub({ me, close, onComplete }: any) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setError('');
+    if (!currentPassword) {
+      setError('请输入当前密码');
+      return;
+    }
+    if (!isStrongLocalPassword(newPassword)) {
+      setError('新密码至少 12 位，且需包含大小写字母、数字和符号');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('两次输入的新密码不一致');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api('/api/app/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      onComplete();
+    } catch (submitError: any) {
+      setError(submitError.message || '密码修改失败，请稍后重试');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="subpage on">
+      <div className="sub-nav"><button className="back" onClick={close} aria-label="返回">‹</button><span className="t">账号与安全</span></div>
+      <div className="sub-body security-body">
+        <div className="account-summary"><span>登录账号</span><strong>{me?.loginName}</strong></div>
+        <form className="security-form" onSubmit={submit}>
+          <label className="auth-field" htmlFor="current-password"><span>当前密码</span><input id="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" placeholder="输入当前密码" maxLength={128} /></label>
+          <label className="auth-field" htmlFor="new-password"><span>新密码</span><input id="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" placeholder="至少 12 位，含大小写、数字和符号" maxLength={128} /></label>
+          <label className="auth-field" htmlFor="new-password-confirm"><span>确认新密码</span><input id="new-password-confirm" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" placeholder="再次输入新密码" maxLength={128} /></label>
+          {error && <div className="auth-feedback error" role="alert">{error}</div>}
+          <button className="btn primary" type="submit" disabled={submitting}>{submitting ? '正在保存…' : '保存新密码'}</button>
+        </form>
+      </div>
+    </div>
   );
 }
 

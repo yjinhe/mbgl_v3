@@ -110,7 +110,7 @@ tangji/
 ## 5. C 端规格(`apps/web`)
 
 ### 5.0 路由与登录
-路由:`/login`、`/`、`/history`、`/stats`、`/mine`;子页(右滑入):`/report`、`/recycle-bin`、`/bind-pharmacy`。登录页:深绿背景卡片、水滴 logo、「糖迹」、slogan「5 秒记一次健康数据」、`btn.primary`「微信一键登录」(`WECHAT_MOCK=true` 直发 token)。
+路由:`/login`、`/`、`/history`、`/stats`、`/mine`;子页(右滑入):`/report`、`/recycle-bin`、`/bind-pharmacy`、账号安全。登录页以账号密码登录/注册为主入口，微信网页授权仅在已配置且当前环境可用时作为次要入口。
 
 ### 5.1 首页 = 四指标总览
 1. 问候区(问候语/日期/「今天已记 n 笔」/🔥 streak 徽章)— 同原型;**streak 定义更新:当天任意指标有 ≥1 条记录即算**。

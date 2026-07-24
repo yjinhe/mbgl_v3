@@ -1,6 +1,6 @@
 # 糖迹 V3
 
-慢病健康记录产品：C 端移动 Web、药房后台、Fastify + Prisma API。
+慢病健康记录产品：手机 Web 为用户主入口，配套药房后台、Fastify + Prisma API；微信小程序保留为次要渠道。
 
 ## 一键启动
 
@@ -16,16 +16,17 @@ pnpm dev
 
 ## 演示账号
 
-- C 端 mock 登录：点击「微信一键登录」
+- 手机 Web：`demo / Demo@1234567`
+- C 端 mock 微信登录：开发环境也可点击「微信一键登录」
 - 药房 A staff：`kn_li / Kn@123456`
 - 药房 A owner：`kangning / Kn@123456`
 - 药房 B owner：`baixingyuan / Bxy@123456`
 - 平台 admin：`admin / Admin@123456`
 - 演示邀请码：`KN23DEMO`
 
-## 微信小程序端
+## 微信小程序端（次要渠道）
 
-原生小程序工程在 `apps/wechat-miniprogram`，用微信开发者工具导入该目录即可。当前 API 地址为 `https://tangji.aiteam.pw`；体验版/正式版必须配置 request 合法域名，并在 API 生产环境填写小程序 AppID 与 AppSecret。详细说明见 `apps/wechat-miniprogram/README.md`。
+原生小程序工程保留在 `apps/wechat-miniprogram`，目前以兼容和维护为主，新用户优先使用手机 Web。未配置小程序 AppID/Secret 不会影响 Web 注册登录和正常发布。详细说明见 `apps/wechat-miniprogram/README.md`。
 
 ## Docker 部署
 

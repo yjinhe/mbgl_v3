@@ -29,9 +29,10 @@ SEED_ON_BOOT=false
 ALLOW_DESTRUCTIVE_SEED=false
 BASELINE_INITIAL_MIGRATION=false
 WECHAT_MOCK=false
-WECHAT_APPID=你的小程序AppID
-WECHAT_SECRET=你的小程序AppSecret
-# 仅发布 C 端 Web 时填写下面三项
+# 小程序为可选渠道，启用时成对填写
+WECHAT_APPID=
+WECHAT_SECRET=
+# 微信网页授权为可选登录方式，启用时成对填写
 WECHAT_WEB_APPID=
 WECHAT_WEB_SECRET=
 WECHAT_WEB_REDIRECT_URI=https://app.example.com

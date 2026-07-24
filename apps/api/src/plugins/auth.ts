@@ -9,6 +9,7 @@ export type Audience = 'app' | 'pharmacy' | 'admin';
 export interface AppToken {
   aud: 'app';
   userId: string;
+  ver?: number;
 }
 
 export interface PharmacyToken {
@@ -54,7 +55,9 @@ export async function requireAuth(request: FastifyRequest, reply: FastifyReply, 
     if (decoded.aud !== aud) return forbidden(reply);
     if (decoded.aud === 'app') {
       const user = await request.server.prisma.user.findUnique({ where: { id: decoded.userId } });
-      if (!user || user.deactivatedAt) return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'UNAUTHORIZED' } });
+      if (!user || user.deactivatedAt || user.authVersion !== (decoded.ver ?? 0)) {
+        return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'UNAUTHORIZED' } });
+      }
       request.auth = decoded;
     }
     if (decoded.aud === 'pharmacy') {

@@ -9,6 +9,9 @@ export async function createSqliteSchema(prisma: PrismaClient) {
       "miniOpenid" TEXT UNIQUE,
       "webOpenid" TEXT UNIQUE,
       "unionid" TEXT UNIQUE,
+      "loginName" TEXT UNIQUE,
+      "passwordHash" TEXT,
+      "authVersion" INTEGER NOT NULL DEFAULT 0,
       "nickname" TEXT NOT NULL DEFAULT '微信用户',
       "sex" TEXT,
       "unit" TEXT NOT NULL DEFAULT 'mmol',
@@ -18,6 +21,7 @@ export async function createSqliteSchema(prisma: PrismaClient) {
       "deactivatedAt" DATETIME,
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
+    `CREATE UNIQUE INDEX "User_loginName_key" ON "User"("loginName")`,
     `CREATE TABLE "GlucoseRecord" (
       "id" TEXT NOT NULL PRIMARY KEY,
       "userId" TEXT NOT NULL,

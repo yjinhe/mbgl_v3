@@ -86,6 +86,102 @@ afterAll(async () => {
   await prisma?.$disconnect();
 });
 
+describe('app account authentication', () => {
+  test('registers a normalized local account and returns a safe session', async () => {
+    const response = await request(app.server)
+      .post('/api/app/auth/register')
+      .send({ loginName: 'Health_User', nickname: '健康用户', password: 'Health@Pass123' })
+      .expect(201);
+
+    expect(response.body.token).toEqual(expect.any(String));
+    expect(response.body.user).toMatchObject({ loginName: 'health_user', nickname: '健康用户', hasPassword: true });
+    expect(response.body.user).not.toHaveProperty('passwordHash');
+    const me = await request(app.server).get('/api/app/me').set('Authorization', `Bearer ${response.body.token}`).expect(200);
+    expect(me.body).toMatchObject({ loginName: 'health_user', hasPassword: true });
+
+    const stored = await prisma.user.findUniqueOrThrow({ where: { loginName: 'health_user' } });
+    expect(stored.openid).toBe('local:health_user');
+    expect(stored.passwordHash).not.toBe('Health@Pass123');
+  });
+
+  test('rejects duplicate accounts and weak passwords', async () => {
+    const duplicate = await request(app.server)
+      .post('/api/app/auth/register')
+      .send({ loginName: 'HEALTH_USER', nickname: '重复用户', password: 'Another@Pass123' })
+      .expect(409);
+    expect(duplicate.body.error.code).toBe('ACCOUNT_EXISTS');
+
+    await request(app.server)
+      .post('/api/app/auth/register')
+      .send({ loginName: 'weak_account', nickname: '弱密码用户', password: 'weak-password' })
+      .expect(422);
+    expect(await prisma.user.findUnique({ where: { loginName: 'weak_account' } })).toBeNull();
+  });
+
+  test('logs in without revealing whether an account exists', async () => {
+    const success = await request(app.server)
+      .post('/api/app/auth/login')
+      .send({ loginName: 'HEALTH_USER', password: 'Health@Pass123' })
+      .expect(200);
+    expect(success.body.user.loginName).toBe('health_user');
+
+    const wrongPassword = await request(app.server)
+      .post('/api/app/auth/login')
+      .send({ loginName: 'health_user', password: 'Wrong@Pass1234' })
+      .expect(403);
+    const missingAccount = await request(app.server)
+      .post('/api/app/auth/login')
+      .send({ loginName: 'missing_user', password: 'Wrong@Pass1234' })
+      .expect(403);
+    expect(wrongPassword.body.error).toEqual(missingAccount.body.error);
+    expect(wrongPassword.body.error.code).toBe('INVALID_CREDENTIALS');
+  });
+
+  test('changes a local password and invalidates the previous session', async () => {
+    const currentPassword = 'Current@Pass123';
+    const newPassword = 'Changed@Pass456';
+    const registration = await request(app.server)
+      .post('/api/app/auth/register')
+      .send({ loginName: 'change_user', nickname: '改密用户', password: currentPassword })
+      .expect(201);
+    const token = registration.body.token as string;
+
+    await request(app.server)
+      .post('/api/app/auth/change-password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ currentPassword: 'Incorrect@Pass1', newPassword })
+      .expect(403);
+
+    await request(app.server)
+      .post('/api/app/auth/change-password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ currentPassword, newPassword })
+      .expect(204);
+
+    await request(app.server).get('/api/app/me').set('Authorization', `Bearer ${token}`).expect(401);
+    await request(app.server).post('/api/app/auth/login').send({ loginName: 'change_user', password: currentPassword }).expect(403);
+    const nextSession = await request(app.server).post('/api/app/auth/login').send({ loginName: 'change_user', password: newPassword }).expect(200);
+    await request(app.server).get('/api/app/me').set('Authorization', `Bearer ${nextSession.body.token}`).expect(200);
+  });
+
+  test('rejects password login for a deactivated account', async () => {
+    await prisma.user.create({
+      data: {
+        openid: 'local:closed_user',
+        loginName: 'closed_user',
+        passwordHash: await hashPassword('Closed@Pass123'),
+        nickname: '已注销用户',
+        deactivatedAt: new Date()
+      }
+    });
+    const response = await request(app.server)
+      .post('/api/app/auth/login')
+      .send({ loginName: 'closed_user', password: 'Closed@Pass123' })
+      .expect(403);
+    expect(response.body.error.code).toBe('INVALID_CREDENTIALS');
+  });
+});
+
 describe('app records', () => {
   test('reports a versioned, non-cacheable health response', async () => {
     const response = await request(app.server).get('/health').expect(200);

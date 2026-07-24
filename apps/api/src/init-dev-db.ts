@@ -21,7 +21,15 @@ async function main() {
   const staff = await prisma.pharmacyStaff.create({ data: { pharmacyId: pharmacy.id, username: 'kn_li', passwordHash: await hashPassword('Kn@123456'), name: '李雯', role: 'staff' } });
   await prisma.pharmacyStaff.create({ data: { pharmacyId: other.id, username: 'baixingyuan', passwordHash: await hashPassword('Bxy@123456'), name: '赵敏', role: 'owner' } });
   const invite = await prisma.inviteCode.create({ data: { pharmacyId: pharmacy.id, staffId: staff.id, code: 'KN23DEMO', expiresAt: new Date(Date.now() + 30 * 86400000) } });
-  const user = await prisma.user.create({ data: { openid: 'mock_seed_demo', nickname: '微信用户_8462', sex: 'male' } });
+  const user = await prisma.user.create({
+    data: {
+      openid: 'mock_seed_demo',
+      loginName: 'demo',
+      passwordHash: await hashPassword('Demo@1234567'),
+      nickname: '微信用户_8462',
+      sex: 'male'
+    }
+  });
   await prisma.pharmacyCustomer.create({ data: { pharmacyId: pharmacy.id, userId: user.id, inviteCodeId: invite.id } });
   await prisma.glucoseRecord.createMany({ data: [
     { userId: user.id, valueMmol: 6.1, period: 'fasting', measuredAt: new Date(), tags: '[]', note: '' },
@@ -42,7 +50,18 @@ async function ensureDevSchemaUpgrades() {
     }
     await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_${column}_key" ON "User"("${column}")`);
   }
+  if (!userColumns.some((column) => column.name === 'loginName')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN "loginName" TEXT');
+  }
+  if (!userColumns.some((column) => column.name === 'passwordHash')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN "passwordHash" TEXT');
+  }
+  if (!userColumns.some((column) => column.name === 'authVersion')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN "authVersion" INTEGER NOT NULL DEFAULT 0');
+  }
+  await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "User_loginName_key" ON "User"("loginName")');
   await migrateLegacyDemoIdentity();
+  await ensureDevWebAccount();
   const staffColumns = await prisma.$queryRawUnsafe<Array<{ name: string }>>('PRAGMA table_info("PharmacyStaff")');
   if (!staffColumns.some((column) => column.name === 'authVersion')) {
     await prisma.$executeRawUnsafe('ALTER TABLE "PharmacyStaff" ADD COLUMN "authVersion" INTEGER NOT NULL DEFAULT 0');
@@ -57,6 +76,15 @@ async function ensureDevSchemaUpgrades() {
   await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON');
   await prisma.$queryRawUnsafe('PRAGMA busy_timeout = 5000');
   await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL');
+}
+
+async function ensureDevWebAccount() {
+  const demo = await prisma.user.findUnique({ where: { openid: 'mock_seed_demo' } });
+  if (!demo || demo.deactivatedAt || demo.loginName || await prisma.user.findUnique({ where: { loginName: 'demo' } })) return;
+  await prisma.user.update({
+    where: { id: demo.id },
+    data: { loginName: 'demo', passwordHash: await hashPassword('Demo@1234567') }
+  });
 }
 
 async function migrateLegacyDemoIdentity() {

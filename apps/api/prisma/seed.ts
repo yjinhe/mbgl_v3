@@ -55,7 +55,15 @@ async function main() {
   });
 
   const demo = await prisma.user.create({
-    data: { openid: 'mock_seed_demo', miniOpenid: 'mock_seed_demo', unionid: 'mock:seed_demo', nickname: '微信用户_8462', sex: 'male' }
+    data: {
+      openid: 'mock_seed_demo',
+      miniOpenid: 'mock_seed_demo',
+      unionid: 'mock:seed_demo',
+      loginName: 'demo',
+      passwordHash: await hashPassword('Demo@1234567'),
+      nickname: '微信用户_8462',
+      sex: 'male'
+    }
   });
   await prisma.pharmacyCustomer.create({ data: { pharmacyId: kn.id, userId: demo.id, inviteCodeId: invite.id, consentAt: ago(12, 10, 30) } });
 

@@ -28,19 +28,16 @@ nano .env.docker
 docker/release.sh v1.0.0
 ```
 
-生产必须设置强随机 `JWT_SECRET`、小程序的 `WECHAT_APPID/WECHAT_SECRET`、C 端 Web 的 `WECHAT_WEB_APPID/WECHAT_WEB_SECRET/WECHAT_WEB_REDIRECT_URI`，以及准确的 `APP_ORIGIN/WEB_ORIGIN`。API 经一层受信任代理时保持 `TRUST_PROXY_HOPS=1`，并保持以下开关关闭：
+生产必须设置强随机 `JWT_SECRET` 以及准确的 `APP_ORIGIN/WEB_ORIGIN`。账号密码是 Web 主登录通道，不依赖微信配置。API 经一层受信任代理时保持 `TRUST_PROXY_HOPS=1`，并保持以下开关关闭：
 
 ```env
-WECHAT_WEB_APPID=公众号或网页应用AppID
-WECHAT_WEB_SECRET=对应AppSecret
-WECHAT_WEB_REDIRECT_URI=https://app.example.com
 APP_ORIGIN=https://app.example.com
 WEB_ORIGIN=https://app.example.com,https://console.example.com
 ```
 
-`WECHAT_WEB_REDIRECT_URI` 必须使用 HTTPS 并与 `APP_ORIGIN` 同源；发布脚本会在备份和构建前检查这些条件，配置不完整时直接停止。
+小程序的 `WECHAT_APPID/WECHAT_SECRET` 和微信网页授权的 `WECHAT_WEB_APPID/WECHAT_WEB_SECRET` 都是可选的，但每组必须成对填写。启用微信网页授权时，`WECHAT_WEB_REDIRECT_URI` 必须使用 HTTPS 并与 `APP_ORIGIN` 同源。
 
-小程序与公众号必须绑定到同一个微信开放平台账号。API 会用 `UnionID` 将 Web 与小程序身份归并为同一患者；任一端未返回 `UnionID` 时登录会失败，以防同一患者被静默拆成两个账号。
+如果同时启用小程序和公众号登录，两者必须绑定到同一个微信开放平台账号。API 会用 `UnionID` 合并微信身份；未返回 `UnionID` 时登录会失败，避免账号被静默拆分。
 
 ```env
 WECHAT_MOCK=false

@@ -8,99 +8,102 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  openid       String    @unique
-  miniOpenid   String?   @unique
-  webOpenid    String?   @unique
-  unionid      String?   @unique
-  nickname     String    @default("微信用户")
-  sex          String?
-  unit         String    @default("mmol")
-  fastingLow   Decimal   @default(4.4)
-  fastingHigh  Decimal   @default(7.0)
-  postMealHigh Decimal   @default(10.0)
+  id            String             @id @default(cuid())
+  openid        String             @unique
+  miniOpenid    String?            @unique
+  webOpenid     String?            @unique
+  unionid       String?            @unique
+  loginName     String?            @unique
+  passwordHash  String?
+  authVersion   Int                @default(0)
+  nickname      String             @default("微信用户")
+  sex           String?
+  unit          String             @default("mmol")
+  fastingLow    Decimal            @default(4.4)
+  fastingHigh   Decimal            @default(7.0)
+  postMealHigh  Decimal            @default(10.0)
   deactivatedAt DateTime?
-  createdAt    DateTime  @default(now())
-  glucose      GlucoseRecord[]
-  bp           BpRecord[]
-  lipid        LipidRecord[]
-  uric         UricRecord[]
-  summaries    DailySummary[]
-  binding      PharmacyCustomer[]
+  createdAt     DateTime           @default(now())
+  glucose       GlucoseRecord[]
+  bp            BpRecord[]
+  lipid         LipidRecord[]
+  uric          UricRecord[]
+  summaries     DailySummary[]
+  binding       PharmacyCustomer[]
 }
 
 model GlucoseRecord {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       User      @relation(fields: [userId], references: [id])
   valueMmol  Decimal
   period     String
   measuredAt DateTime
-  tags       String   @default("[]")
-  note       String   @default("")
+  tags       String    @default("[]")
+  note       String    @default("")
   deletedAt  DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([userId, measuredAt])
   @@index([userId, deletedAt])
 }
 
 model BpRecord {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       User      @relation(fields: [userId], references: [id])
   sbp        Int
   dbp        Int
   pulse      Int?
   period     String
   measuredAt DateTime
-  tags       String   @default("[]")
-  note       String   @default("")
+  tags       String    @default("[]")
+  note       String    @default("")
   deletedAt  DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([userId, measuredAt])
 }
 
 model LipidRecord {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       User      @relation(fields: [userId], references: [id])
   tc         Decimal?
   tg         Decimal?
   ldl        Decimal?
   hdl        Decimal?
-  fasting    Boolean  @default(true)
+  fasting    Boolean   @default(true)
   measuredAt DateTime
-  note       String   @default("")
+  note       String    @default("")
   deletedAt  DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([userId, measuredAt])
 }
 
 model UricRecord {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       User      @relation(fields: [userId], references: [id])
   value      Int
-  fasting    Boolean  @default(true)
+  fasting    Boolean   @default(true)
   measuredAt DateTime
-  note       String   @default("")
+  note       String    @default("")
   deletedAt  DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([userId, measuredAt])
 }
 
 model DailySummary {
-  id      String @id @default(cuid())
+  id      String  @id @default(cuid())
   userId  String
-  user    User   @relation(fields: [userId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
   date    String
   avg     Decimal
   max     Decimal
@@ -112,56 +115,56 @@ model DailySummary {
 }
 
 model Pharmacy {
-  id         String   @id @default(cuid())
+  id         String             @id @default(cuid())
   name       String
-  address    String   @default("")
-  phone      String   @default("")
+  address    String             @default("")
+  phone      String             @default("")
   disabledAt DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime           @default(now())
   staff      PharmacyStaff[]
   customers  PharmacyCustomer[]
   invites    InviteCode[]
 }
 
 model PharmacyStaff {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   pharmacyId   String
-  pharmacy     Pharmacy @relation(fields: [pharmacyId], references: [id])
-  username     String   @unique
+  pharmacy     Pharmacy  @relation(fields: [pharmacyId], references: [id])
+  username     String    @unique
   passwordHash String
   name         String
-  role         String   @default("staff")
-  authVersion  Int      @default(0)
+  role         String    @default("staff")
+  authVersion  Int       @default(0)
   disabledAt   DateTime?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 }
 
 model InviteCode {
-  id         String   @id @default(cuid())
+  id         String             @id @default(cuid())
   pharmacyId String
-  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id])
+  pharmacy   Pharmacy           @relation(fields: [pharmacyId], references: [id])
   staffId    String
-  code       String   @unique
+  code       String             @unique
   expiresAt  DateTime
   disabledAt DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime           @default(now())
   bindings   PharmacyCustomer[]
 }
 
 model PharmacyCustomer {
-  id           String   @id @default(cuid())
+  id           String      @id @default(cuid())
   pharmacyId   String
-  pharmacy     Pharmacy @relation(fields: [pharmacyId], references: [id])
+  pharmacy     Pharmacy    @relation(fields: [pharmacyId], references: [id])
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
+  user         User        @relation(fields: [userId], references: [id])
   inviteCodeId String?
   inviteCode   InviteCode? @relation(fields: [inviteCodeId], references: [id])
-  consentAt    DateTime @default(now())
+  consentAt    DateTime    @default(now())
   unboundAt    DateTime?
+  // SQLite partial unique index for active bindings is maintained by migrations.
 
   @@index([pharmacyId, unboundAt])
   @@index([userId, unboundAt])
-  // SQLite partial unique index for active bindings is maintained by migrations.
 }
 
 model FollowUp {

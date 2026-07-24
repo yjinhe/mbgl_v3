@@ -22,9 +22,15 @@ import {
   type ResolvedWechatIdentity
 } from '../services/wechat.js';
 import { recycleCutoff, recycleDaysLeft } from '../services/recycle.js';
+import { hashPassword, isStrongPassword, verifyPassword } from '../services/password.js';
 import { inferBpPeriod, inferGlucosePeriod, localDayKey, type GlucosePeriod, type Metric } from '@tangji/shared';
 
 const metricSchema = z.enum(['glucose', 'bp', 'lipid', 'uric']);
+const loginNameSchema = z.string().trim().min(4).max(32).regex(/^[A-Za-z0-9_.-]+$/).transform((value) => value.toLowerCase());
+const strongPasswordSchema = z.string().min(12).max(128).refine(isStrongPassword, {
+  message: '密码至少 12 位，且需包含大小写字母、数字和符号'
+});
+const invalidPasswordHash = '$2a$10$uTWjV9reQFAsAXui6E4MP.QvGzyLyN4HqFt8W7S2BYCaZH9XbGEMe';
 const pageQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(100)
@@ -34,6 +40,28 @@ async function currentUser(app: FastifyInstance, auth: AppToken) {
   const user = await app.prisma.user.findUnique({ where: { id: auth.userId } });
   if (!user) throw new Error('missing user');
   return user;
+}
+
+function publicAppUser(user: {
+  id: string;
+  loginName: string | null;
+  nickname: string;
+  sex: string | null;
+  unit: string;
+  passwordHash: string | null;
+}) {
+  return {
+    id: user.id,
+    loginName: user.loginName,
+    nickname: user.nickname,
+    sex: user.sex,
+    unit: user.unit,
+    hasPassword: Boolean(user.passwordHash)
+  };
+}
+
+function createAppToken(app: FastifyInstance, user: { id: string; authVersion: number }) {
+  return app.jwt.sign({ aud: 'app', userId: user.id, ver: user.authVersion });
 }
 
 type WechatProvider = 'mini' | 'web';
@@ -76,12 +104,71 @@ async function createAppSession(app: FastifyInstance, provider: WechatProvider, 
   if (user.deactivatedAt) {
     throw new WechatLoginError('账号已注销', { kind: 'deactivated' });
   }
-  const token = app.jwt.sign({ aud: 'app', userId: user.id });
-  return { token, user: { id: user.id, nickname: user.nickname, sex: user.sex, unit: user.unit } };
+  return { token: createAppToken(app, user), user: publicAppUser(user) };
 }
 
 export async function appRoutes(app: FastifyInstance) {
+  app.post('/auth/register', { config: { rateLimit: { max: 10, timeWindow: '1 hour' } } }, async (request, reply) => {
+    const body = z.object({
+      loginName: loginNameSchema,
+      nickname: z.string().trim().min(1).max(30),
+      password: strongPasswordSchema
+    }).parse(request.body);
+    try {
+      const user = await app.prisma.user.create({
+        data: {
+          openid: `local:${body.loginName}`,
+          loginName: body.loginName,
+          passwordHash: await hashPassword(body.password),
+          nickname: body.nickname
+        }
+      });
+      return reply.code(201).send({ token: createAppToken(app, user), user: publicAppUser(user) });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return conflict(reply, 'ACCOUNT_EXISTS', '该账号已被注册');
+      }
+      throw error;
+    }
+  });
+
+  app.post('/auth/login', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (request, reply) => {
+    const body = z.object({ loginName: loginNameSchema, password: z.string().min(1).max(128) }).parse(request.body);
+    const user = await app.prisma.user.findUnique({ where: { loginName: body.loginName } });
+    const passwordMatches = await verifyPassword(body.password, user?.passwordHash ?? invalidPasswordHash);
+    if (!user || !user.passwordHash || user.deactivatedAt || !passwordMatches) {
+      return reply.code(403).send({ error: { code: 'INVALID_CREDENTIALS', message: '账号或密码不正确' } });
+    }
+    return { token: createAppToken(app, user), user: publicAppUser(user) };
+  });
+
+  app.post('/auth/change-password', {
+    preHandler: (request, reply) => requireAuth(request, reply, 'app'),
+    config: { rateLimit: { max: 5, timeWindow: '10 minutes' } }
+  }, async (request, reply) => {
+    const auth = request.auth as AppToken;
+    const body = z.object({
+      currentPassword: z.string().min(1).max(128),
+      newPassword: strongPasswordSchema
+    }).parse(request.body);
+    const user = await currentUser(app, auth);
+    if (!user.passwordHash || !(await verifyPassword(body.currentPassword, user.passwordHash))) {
+      return reply.code(403).send({ error: { code: 'INVALID_CREDENTIALS', message: '当前密码不正确' } });
+    }
+    if (await verifyPassword(body.newPassword, user.passwordHash)) {
+      return validationError(reply, '新密码不能与当前密码相同');
+    }
+    await app.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await hashPassword(body.newPassword), authVersion: { increment: 1 } }
+    });
+    return reply.code(204).send();
+  });
+
   app.post('/auth/wechat', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
+    if (!config.wechatMock && (!config.wechatAppId || !config.wechatSecret)) {
+      return reply.code(503).send({ error: { code: 'WECHAT_MINI_DISABLED', message: '小程序微信登录尚未启用' } });
+    }
     const body = z.object({ code: z.string().min(1) }).parse(request.body);
     try {
       const identity = await resolveWechatOpenid(body.code);
@@ -135,6 +222,8 @@ export async function appRoutes(app: FastifyInstance) {
     });
     return {
       id: user.id,
+      loginName: user.loginName,
+      hasPassword: Boolean(user.passwordHash),
       nickname: user.nickname,
       sex: user.sex,
       unit: user.unit,
