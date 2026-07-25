@@ -21,6 +21,7 @@ const API = import.meta.env.VITE_API_BASE || '';
 const WECHAT_WEB_STATE_KEY = 'tangji_wechat_web_oauth_state';
 const WECHAT_WEB_RETURN_KEY = 'tangji_wechat_web_oauth_return';
 const WECHAT_WEB_APPID = String(import.meta.env.VITE_WECHAT_WEB_APPID || '').trim();
+const APP_PASSWORD_MIN_LENGTH = 7;
 
 type Tab = 'home' | 'history' | 'stats' | 'mine';
 type Sub = 'bind' | 'recycle' | 'report' | 'security' | null;
@@ -250,8 +251,8 @@ function toLocalInput(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-function isStrongLocalPassword(password: string) {
-  return password.length >= 12 && password.length <= 128 && /[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
+function isValidAppPassword(password: string) {
+  return password.length >= APP_PASSWORD_MIN_LENGTH && password.length <= 128;
 }
 
 function AuthPanel({ acceptLogin, authPhase, authMessage, loginWithWechat, notice, clearNotice }: any) {
@@ -284,8 +285,8 @@ function AuthPanel({ acceptLogin, authPhase, authMessage, loginWithWechat, notic
       setError('请填写昵称');
       return;
     }
-    if (mode === 'register' && !isStrongLocalPassword(password)) {
-      setError('密码至少 12 位，且需包含大小写字母、数字和符号');
+    if (mode === 'register' && !isValidAppPassword(password)) {
+      setError('密码至少 7 位');
       return;
     }
     if (mode === 'register' && password !== confirmPassword) {
@@ -323,7 +324,7 @@ function AuthPanel({ acceptLogin, authPhase, authMessage, loginWithWechat, notic
       <form className="auth-form" onSubmit={submit}>
         <label className="auth-field" htmlFor="login-name"><span>账号</span><input id="login-name" name="username" value={loginName} onChange={(event) => setLoginName(event.target.value)} autoComplete="username" placeholder="4–32 位字母或数字" maxLength={32} /></label>
         {mode === 'register' && <label className="auth-field" htmlFor="nickname"><span>昵称</span><input id="nickname" value={nickname} onChange={(event) => setNickname(event.target.value)} autoComplete="nickname" placeholder="怎么称呼你" maxLength={30} /></label>}
-        <label className="auth-field" htmlFor="password"><span>密码</span><input id="password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === 'register' ? 'new-password' : 'current-password'} placeholder={mode === 'register' ? '至少 12 位，含大小写、数字和符号' : '输入密码'} maxLength={128} /></label>
+        <label className="auth-field" htmlFor="password"><span>密码</span><input id="password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === 'register' ? 'new-password' : 'current-password'} placeholder={mode === 'register' ? '至少 7 位' : '输入密码'} minLength={mode === 'register' ? APP_PASSWORD_MIN_LENGTH : 1} maxLength={128} /></label>
         {mode === 'register' && <label className="auth-field" htmlFor="confirm-password"><span>确认密码</span><input id="confirm-password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" placeholder="再次输入密码" maxLength={128} /></label>}
         {(error || notice) && <div className={`auth-feedback ${error ? 'error' : 'success'}`} role={error ? 'alert' : 'status'}>{error || notice}</div>}
         <button className="btn primary auth-submit" type="submit" disabled={submitting}>{submitting ? (mode === 'register' ? '正在创建账号…' : '正在登录…') : (mode === 'register' ? '创建账号' : '登录')}</button>
@@ -794,8 +795,8 @@ function AccountSecuritySub({ me, close, onComplete }: any) {
       setError('请输入当前密码');
       return;
     }
-    if (!isStrongLocalPassword(newPassword)) {
-      setError('新密码至少 12 位，且需包含大小写字母、数字和符号');
+    if (!isValidAppPassword(newPassword)) {
+      setError('新密码至少 7 位');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -823,7 +824,7 @@ function AccountSecuritySub({ me, close, onComplete }: any) {
         <div className="account-summary"><span>登录账号</span><strong>{me?.loginName}</strong></div>
         <form className="security-form" onSubmit={submit}>
           <label className="auth-field" htmlFor="current-password"><span>当前密码</span><input id="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" placeholder="输入当前密码" maxLength={128} /></label>
-          <label className="auth-field" htmlFor="new-password"><span>新密码</span><input id="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" placeholder="至少 12 位，含大小写、数字和符号" maxLength={128} /></label>
+          <label className="auth-field" htmlFor="new-password"><span>新密码</span><input id="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" placeholder="至少 7 位" minLength={APP_PASSWORD_MIN_LENGTH} maxLength={128} /></label>
           <label className="auth-field" htmlFor="new-password-confirm"><span>确认新密码</span><input id="new-password-confirm" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" placeholder="再次输入新密码" maxLength={128} /></label>
           {error && <div className="auth-feedback error" role="alert">{error}</div>}
           <button className="btn primary" type="submit" disabled={submitting}>{submitting ? '正在保存…' : '保存新密码'}</button>

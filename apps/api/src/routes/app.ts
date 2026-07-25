@@ -22,14 +22,12 @@ import {
   type ResolvedWechatIdentity
 } from '../services/wechat.js';
 import { recycleCutoff, recycleDaysLeft } from '../services/recycle.js';
-import { hashPassword, isStrongPassword, verifyPassword } from '../services/password.js';
+import { hashPassword, verifyPassword } from '../services/password.js';
 import { inferBpPeriod, inferGlucosePeriod, localDayKey, type GlucosePeriod, type Metric } from '@tangji/shared';
 
 const metricSchema = z.enum(['glucose', 'bp', 'lipid', 'uric']);
 const loginNameSchema = z.string().trim().min(4).max(32).regex(/^[A-Za-z0-9_.-]+$/).transform((value) => value.toLowerCase());
-const strongPasswordSchema = z.string().min(12).max(128).refine(isStrongPassword, {
-  message: '密码至少 12 位，且需包含大小写字母、数字和符号'
-});
+const appPasswordSchema = z.string().min(7).max(128);
 const invalidPasswordHash = '$2a$10$uTWjV9reQFAsAXui6E4MP.QvGzyLyN4HqFt8W7S2BYCaZH9XbGEMe';
 const pageQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
@@ -112,7 +110,7 @@ export async function appRoutes(app: FastifyInstance) {
     const body = z.object({
       loginName: loginNameSchema,
       nickname: z.string().trim().min(1).max(30),
-      password: strongPasswordSchema
+      password: appPasswordSchema
     }).parse(request.body);
     try {
       const user = await app.prisma.user.create({
@@ -149,7 +147,7 @@ export async function appRoutes(app: FastifyInstance) {
     const auth = request.auth as AppToken;
     const body = z.object({
       currentPassword: z.string().min(1).max(128),
-      newPassword: strongPasswordSchema
+      newPassword: appPasswordSchema
     }).parse(request.body);
     const user = await currentUser(app, auth);
     if (!user.passwordHash || !(await verifyPassword(body.currentPassword, user.passwordHash))) {

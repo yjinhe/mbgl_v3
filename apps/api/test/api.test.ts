@@ -88,9 +88,10 @@ afterAll(async () => {
 
 describe('app account authentication', () => {
   test('registers a normalized local account and returns a safe session', async () => {
+    const password = '1234567';
     const response = await request(app.server)
       .post('/api/app/auth/register')
-      .send({ loginName: 'Health_User', nickname: '健康用户', password: 'Health@Pass123' })
+      .send({ loginName: 'Health_User', nickname: '健康用户', password })
       .expect(201);
 
     expect(response.body.token).toEqual(expect.any(String));
@@ -101,10 +102,10 @@ describe('app account authentication', () => {
 
     const stored = await prisma.user.findUniqueOrThrow({ where: { loginName: 'health_user' } });
     expect(stored.openid).toBe('local:health_user');
-    expect(stored.passwordHash).not.toBe('Health@Pass123');
+    expect(stored.passwordHash).not.toBe(password);
   });
 
-  test('rejects duplicate accounts and weak passwords', async () => {
+  test('rejects duplicate accounts and passwords shorter than seven characters', async () => {
     const duplicate = await request(app.server)
       .post('/api/app/auth/register')
       .send({ loginName: 'HEALTH_USER', nickname: '重复用户', password: 'Another@Pass123' })
@@ -113,7 +114,7 @@ describe('app account authentication', () => {
 
     await request(app.server)
       .post('/api/app/auth/register')
-      .send({ loginName: 'weak_account', nickname: '弱密码用户', password: 'weak-password' })
+      .send({ loginName: 'weak_account', nickname: '短密码用户', password: '123456' })
       .expect(422);
     expect(await prisma.user.findUnique({ where: { loginName: 'weak_account' } })).toBeNull();
   });
@@ -121,7 +122,7 @@ describe('app account authentication', () => {
   test('logs in without revealing whether an account exists', async () => {
     const success = await request(app.server)
       .post('/api/app/auth/login')
-      .send({ loginName: 'HEALTH_USER', password: 'Health@Pass123' })
+      .send({ loginName: 'HEALTH_USER', password: '1234567' })
       .expect(200);
     expect(success.body.user.loginName).toBe('health_user');
 
@@ -138,8 +139,8 @@ describe('app account authentication', () => {
   });
 
   test('changes a local password and invalidates the previous session', async () => {
-    const currentPassword = 'Current@Pass123';
-    const newPassword = 'Changed@Pass456';
+    const currentPassword = '1234567';
+    const newPassword = '7654321';
     const registration = await request(app.server)
       .post('/api/app/auth/register')
       .send({ loginName: 'change_user', nickname: '改密用户', password: currentPassword })
@@ -151,6 +152,12 @@ describe('app account authentication', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ currentPassword: 'Incorrect@Pass1', newPassword })
       .expect(403);
+
+    await request(app.server)
+      .post('/api/app/auth/change-password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ currentPassword, newPassword: '654321' })
+      .expect(422);
 
     await request(app.server)
       .post('/api/app/auth/change-password')

@@ -8,7 +8,7 @@ test('C端登录后显示血糖首页', async ({ page }) => {
 
 test('手机网页可注册、退出并使用账号密码登录', async ({ page }) => {
   const loginName = `web_${Date.now().toString(36)}`;
-  const password = 'Web@Account123';
+  const password = '1234567';
   await page.goto('/');
   await page.getByRole('tab', { name: '注册' }).click();
   await page.getByLabel('账号', { exact: true }).fill(loginName);
