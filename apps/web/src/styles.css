@@ -174,6 +174,29 @@
   color: var(--danger);
 }
 
+.icp-footer {
+  padding: 20px 0 4px;
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.icp-footer a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.icp-footer a:hover,
+.icp-footer a:focus-visible {
+  color: var(--brand-deep);
+  text-decoration: underline;
+}
+
+.auth-icp-footer {
+  padding-bottom: max(4px, env(safe-area-inset-bottom));
+}
+
 .account-card {
   padding: 4px 16px;
 }

@@ -22,6 +22,7 @@ const WECHAT_WEB_STATE_KEY = 'tangji_wechat_web_oauth_state';
 const WECHAT_WEB_RETURN_KEY = 'tangji_wechat_web_oauth_return';
 const WECHAT_WEB_APPID = String(import.meta.env.VITE_WECHAT_WEB_APPID || '').trim();
 const APP_PASSWORD_MIN_LENGTH = 7;
+const ICP_FILING_NUMBER = '京ICP备2026047601号-1';
 
 type Tab = 'home' | 'history' | 'stats' | 'mine';
 type Sub = 'bind' | 'recycle' | 'report' | 'security' | null;
@@ -253,6 +254,14 @@ function toLocalInput(d = new Date()) {
 
 function isValidAppPassword(password: string) {
   return password.length >= APP_PASSWORD_MIN_LENGTH && password.length <= 128;
+}
+
+function IcpFooter({ className = '' }: { className?: string }) {
+  return (
+    <footer className={`icp-footer ${className}`.trim()}>
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">{ICP_FILING_NUMBER}</a>
+    </footer>
+  );
 }
 
 function AuthPanel({ acceptLogin, authPhase, authMessage, loginWithWechat, notice, clearNotice }: any) {
@@ -541,6 +550,7 @@ function App() {
         <div className="device">
           <div className="screen auth-screen">
             <AuthPanel acceptLogin={acceptLogin} authPhase={authPhase} authMessage={authMessage} loginWithWechat={loginWithWechat} notice={authNotice} clearNotice={() => setAuthNotice('')} />
+            <IcpFooter className="auth-icp-footer" />
           </div>
         </div>
       </div>
@@ -627,6 +637,7 @@ function Home({ overview, me, setTab, setStatMetric }: any) {
       </div>
       {(['bp', 'lipid', 'uric'] as Metric[]).map((m) => <MetricCard key={m} metric={m} overview={overview} setTab={setTab} setStatMetric={setStatMetric} me={me} />)}
       <div className="foot-note">点击任意指标卡查看统计详情</div>
+      <IcpFooter />
     </>
   );
 }
