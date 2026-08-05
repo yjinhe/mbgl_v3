@@ -24,7 +24,7 @@ const periodNames = {
 const glucosePeriods = ['fasting', 'after_breakfast', 'before_lunch', 'after_lunch', 'before_dinner', 'after_dinner', 'bedtime', 'dawn', 'random'];
 const bpPeriods = ['morning', 'daytime', 'evening', 'night'];
 const glucoseTags = ['运动后', '聚餐', '加餐', '感冒', '熬夜', '情绪波动'];
-const bpTags = ['服药前', '服药后', '运动后', '情绪波动'];
+const bpTags = ['运动后', '情绪波动', '休息后'];
 const lipidItems = [
   { key: 'tc', name: '总胆固醇', abbr: 'TC', ref: '<5.2' },
   { key: 'tg', name: '甘油三酯', abbr: 'TG', ref: '<1.7' },
@@ -54,6 +54,13 @@ function statusStyle(status) {
   return `color:${statusColor[status && status.key] || '#7A8A85'}`;
 }
 
+function neutralStatusLabel(status) {
+  if (!status) return '';
+  if (status.key === 'dlow') return '明显偏低';
+  if (status.key === 'dhigh') return '明显偏高';
+  return status.label || '';
+}
+
 function inferGlucosePeriod(date = new Date()) {
   const hour = date.getHours() + date.getMinutes() / 60;
   if (hour >= 5 && hour < 9) return 'fasting';
@@ -80,8 +87,8 @@ function glucoseStatus(value, period, target) {
   const goals = target || { fastingLow: 4.4, fastingHigh: 7, postMealHigh: 10 };
   const fastPeriods = ['fasting', 'before_lunch', 'before_dinner', 'bedtime', 'dawn'];
   const high = fastPeriods.includes(period) ? goals.fastingHigh : goals.postMealHigh;
-  if (v < 3.9) return { key: 'dlow', label: '低血糖' };
-  if (v > 16.7) return { key: 'dhigh', label: '显著偏高' };
+  if (v < 3.9) return { key: 'dlow', label: '明显偏低' };
+  if (v > 16.7) return { key: 'dhigh', label: '明显偏高' };
   if (v > high) return { key: 'hi', label: '偏高' };
   if (v < goals.fastingLow) return { key: 'lo', label: '偏低' };
   return { key: 'ok', label: '达标' };
@@ -120,7 +127,7 @@ function uricStatus(value, sex) {
   if (v < 150) return { key: 'lo', label: '偏低' };
   if (v <= threshold) return { key: 'ok', label: '达标' };
   if (v <= 540) return { key: 'hi', label: '偏高' };
-  return { key: 'dhigh', label: '显著偏高' };
+  return { key: 'dhigh', label: '明显偏高' };
 }
 
 function readRecord(metric, record) {
@@ -148,6 +155,7 @@ module.exports = {
   metrics,
   periodNames,
   readRecord,
+  neutralStatusLabel,
   statusClass,
   statusColor,
   statusStyle,

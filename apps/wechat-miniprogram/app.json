@@ -5,8 +5,9 @@
     "pages/record/index",
     "pages/stats/index",
     "pages/mine/index",
-    "pages/bind/index",
-    "pages/recycle/index"
+    "pages/recycle/index",
+    "pages/legal/privacy/index",
+    "pages/legal/terms/index"
   ],
   "window": {
     "navigationBarTitleText": "糖迹",
@@ -15,6 +16,7 @@
     "backgroundColor": "#F2F5F3",
     "navigationStyle": "custom"
   },
+  "__usePrivacyCheck__": true,
   "style": "v2",
   "sitemapLocation": "sitemap.json"
 }

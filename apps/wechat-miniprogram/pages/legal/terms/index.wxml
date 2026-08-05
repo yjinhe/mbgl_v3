@@ -1,0 +1,34 @@
+<view class="app-stage">
+  <view class="screen">
+    <view class="safe-navbar" style="{{navStyle}}">
+      <button class="back" bindtap="back">‹</button>
+      <view class="title">用户协议</view>
+    </view>
+    <view class="pages">
+      <view class="page legal-page">
+        <view class="legal-meta">更新及生效日期：2026 年 7 月 27 日</view>
+
+        <view class="legal-title">糖迹用户协议</view>
+        <view class="legal-paragraph">欢迎使用糖迹。开始使用前，请认真阅读并理解本协议和隐私政策。您勾选同意并登录，即表示接受本协议。</view>
+
+        <view class="legal-heading">一、服务内容</view>
+        <view class="legal-paragraph">糖迹提供个人健康数据的录入、查看、统计、导出和账号管理功能。页面展示的参考范围和统计结果仅用于整理个人记录，不构成诊断、治疗或个性化建议，也不能替代专业机构的判断。</view>
+
+        <view class="legal-heading">二、账号使用</view>
+        <view class="legal-paragraph">您通过微信登录后获得个人账号。请妥善保管微信账号和设备，不得冒用他人身份、干扰服务运行或利用本服务从事违法活动。因主动分享导出文件产生的信息披露风险由您自行管理。</view>
+
+        <view class="legal-heading">三、记录责任</view>
+        <view class="legal-paragraph">您应确保所填内容真实、合法并有权处理。设备误差、录入错误或网络异常可能影响记录结果，请根据实际情况核对。身体不适时，应及时向专业医疗机构咨询，不应仅依据本工具的显示自行判断。</view>
+
+        <view class="legal-heading">四、数据和隐私</view>
+        <view class="legal-paragraph">我们按照《糖迹隐私政策》处理您的个人信息。您可以导出记录、删除单条记录或注销账号。注销完成后，账号及关联数据将按隐私政策处理且无法恢复。</view>
+
+        <view class="legal-heading">五、服务变更</view>
+        <view class="legal-paragraph">为保障安全、修复故障或满足法律要求，我们可能更新功能或短暂停止服务。发生对您权益有重大影响的变化时，会通过页面提示等合理方式告知。</view>
+
+        <view class="legal-heading">六、联系与争议</view>
+        <view class="legal-paragraph">本协议适用中华人民共和国法律。您可通过本小程序资料页公示的开发者联系方式反馈问题，我们会在合理期限内处理。</view>
+      </view>
+    </view>
+  </view>
+</view>

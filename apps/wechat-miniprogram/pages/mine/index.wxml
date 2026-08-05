@@ -24,25 +24,17 @@
             </view>
           </view>
 
-          <view class="sec-label">服务药房</view>
-          <view class="card">
-            <view wx:if="{{me.binding}}" class="bound-cell">
-              <view class="bi"><view class="bn">{{me.binding.pharmacyName}}</view><view class="bs">{{bindingText}}</view></view>
-              <button class="danger-text" bindtap="unbind">解绑</button>
-            </view>
-            <view wx:else class="cell" bindtap="goBind">
-              <view class="cm"><view class="ct brand">＋ 绑定服务药房</view><view class="cs">输入药房邀请码，获得用药与健康管理服务</view></view>
-              <view class="cv">›</view>
-            </view>
-          </view>
-
           <view class="sec-label">数据与隐私</view>
           <view class="card cell-card">
+            <view class="cell" bindtap="exportAll"><view class="cm"><view class="ct">{{exporting ? '正在导出…' : '导出全部记录'}}</view><view class="cs">生成 ZIP 文件并通过微信发送或保存</view></view><view class="cv">›</view></view>
             <view class="cell" bindtap="goRecycle"><view class="cm"><view class="ct">回收站</view><view class="cs">删除的记录保留 7 天</view></view><view class="cv">›</view></view>
+            <view class="cell" bindtap="goTerms"><view class="cm"><view class="ct">用户协议</view></view><view class="cv">›</view></view>
+            <view class="cell" bindtap="goPrivacy"><view class="cm"><view class="ct">隐私政策</view></view><view class="cv">›</view></view>
+            <view class="cell" bindtap="openWechatPrivacy"><view class="cm"><view class="ct">微信隐私保护指引</view></view><view class="cv">›</view></view>
             <view class="cell" bindtap="logout"><view class="cm"><view class="ct">退出登录</view><view class="cs">仅清除本机登录状态</view></view></view>
             <view class="cell account-delete {{deletingAccount ? 'disabled' : ''}}" bindtap="deleteAccount"><view class="cm"><view class="ct danger-text">{{deletingAccount ? '正在注销…' : '注销账号'}}</view><view class="cs">永久删除账号及全部关联数据</view></view></view>
           </view>
-          <view class="foot-note">糖迹仅作记录工具，不提供诊断与用药建议，请遵医嘱</view>
+          <view class="foot-note">糖迹仅用于个人健康数据记录，不提供诊断、治疗或个性化建议</view>
         </block>
       </view>
     </view>

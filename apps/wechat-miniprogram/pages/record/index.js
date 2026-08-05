@@ -70,16 +70,19 @@ Page({
     this.setData({ navStyle: getApp().globalData.navStyle });
   },
 
-  onShow() {
+  async onShow() {
     const selected = wx.getStorageSync('tangji_record_metric') || this.data.metric;
     wx.removeStorageSync('tangji_record_metric');
     this.setMetricValue(selected);
-    loadAppData(this).then(() => {
-      this.setData({
-        unitText: this.unitTextFor(this.data.metric)
-      });
-      this.updateLive();
+    const data = await loadAppData(this);
+    if (!data) {
+      wx.reLaunch({ url: '/pages/home/index' });
+      return;
+    }
+    this.setData({
+      unitText: this.unitTextFor(this.data.metric)
     });
+    this.updateLive();
   },
 
   async login() {
@@ -342,9 +345,7 @@ Page({
       const result = await request(`/api/app/records/${metric}`, { method: 'POST', data });
       this.showToast(metric === 'glucose' ? `已记录 ${result.record.displayValue || this.data.value}` : '已记录');
       this.setMetricValue(metric);
-      if (result.safetyAlert) {
-        setTimeout(() => this.showSafety(metric, result.record), 340);
-      }
+      if (result.safetyAlert) setTimeout(() => this.showSafety(), 340);
     } catch (error) {
       this.showToast(error.message || '保存失败');
     } finally {
@@ -352,13 +353,12 @@ Page({
     }
   },
 
-  showSafety(metric, record) {
-    const message = metric === 'bp'
-      ? `本次测量 ${record.sbp}/${record.dbp} mmHg，明显高于参考范围。建议静坐休息 5 分钟后复测；若仍明显偏高或伴有不适，请及时就医。`
-      : metric === 'uric'
-        ? `本次测量 ${record.value} μmol/L，明显高于参考上限。建议注意多饮水，并尽快就医复查。`
-        : `本次测量 ${record.displayValue || record.valueMmol}，超出安全提醒范围。请按身体情况处理，必要时及时就医。`;
-    wx.showModal({ title: '健康提醒', content: `${message}\n\n本程序不提供诊疗建议，请遵医嘱。`, showCancel: false });
+  showSafety() {
+    wx.showModal({
+      title: '数值提醒',
+      content: '本次数值超出参考范围，仅供个人记录。如有不适，请咨询专业医疗机构。',
+      showCancel: false
+    });
   },
 
   showToast(message) {

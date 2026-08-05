@@ -1,6 +1,7 @@
 const { doLogin, loadAppData } = require('../../utils/page');
+const { hasConsent } = require('../../utils/privacy');
 const { fmtMD, fmtTime, dayLabel, greetingAt, localDateLine } = require('../../utils/format');
-const { metrics, statusClass, statusStyle, periodNames } = require('../../utils/metrics');
+const { metrics, neutralStatusLabel, statusClass, statusStyle, periodNames } = require('../../utils/metrics');
 
 Page({
   data: {
@@ -11,6 +12,7 @@ Page({
     me: null,
     overview: null,
     cards: [],
+    consentChecked: false,
     tab: 'home',
     homeOn: 'on',
     historyOn: '',
@@ -20,7 +22,10 @@ Page({
   },
 
   onLoad() {
-    this.setData({ navStyle: getApp().globalData.navStyle });
+    this.setData({
+      navStyle: getApp().globalData.navStyle,
+      consentChecked: hasConsent()
+    });
   },
 
   onShow() {
@@ -28,7 +33,23 @@ Page({
   },
 
   async login() {
-    await doLogin(this, () => this.refresh());
+    if (!this.data.consentChecked) {
+      wx.showToast({ title: '请先阅读并同意用户协议和隐私政策', icon: 'none' });
+      return;
+    }
+    await doLogin(this, () => this.refresh(), { acceptConsent: true });
+  },
+
+  toggleConsent() {
+    this.setData({ consentChecked: !this.data.consentChecked });
+  },
+
+  goTerms() {
+    wx.navigateTo({ url: '/pages/legal/terms/index' });
+  },
+
+  goPrivacy() {
+    wx.navigateTo({ url: '/pages/legal/privacy/index' });
   },
 
   async refresh() {
@@ -82,7 +103,7 @@ Page({
       statusClass: statusClass(status),
       statusStyle: statusStyle(status),
       statusColorValue: this.statusColor(status.key),
-      statusLabel: status.label,
+      statusLabel: neutralStatusLabel(status),
       dateText: dayLabel(latest.measuredAt),
       timeText: fmtTime(latest.measuredAt),
       mdText: fmtMD(latest.measuredAt),

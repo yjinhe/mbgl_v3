@@ -15,7 +15,7 @@ Page({
     summary: [],
     bars: [],
     hasBars: false,
-    footnote: '以上统计仅供参考，不构成诊疗建议，请遵医嘱。',
+    footnote: '数据统计仅供个人记录参考，不作为判断身体状况的依据。',
     navStyle: ''
   },
 

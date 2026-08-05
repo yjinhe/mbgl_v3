@@ -12,6 +12,10 @@
               <view class="avatar">糖</view>
               <view><view class="n">糖迹</view><view class="d">5 秒记一次健康数据</view></view>
             </view>
+            <view class="consent-row" bindtap="toggleConsent">
+              <view class="consent-check {{consentChecked ? 'on' : ''}}">{{consentChecked ? '✓' : ''}}</view>
+              <view class="consent-copy">我已阅读并同意<text class="legal-link" catchtap="goTerms">《用户协议》</text>和<text class="legal-link" catchtap="goPrivacy">《隐私政策》</text>，并同意处理我主动填写的健康数据</view>
+            </view>
             <button class="btn primary" loading="{{loading}}" bindtap="login">微信一键登录</button>
           </view>
         </block>

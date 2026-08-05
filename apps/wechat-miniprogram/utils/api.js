@@ -43,6 +43,29 @@ function request(path, options = {}) {
   });
 }
 
+function download(path) {
+  const token = getToken();
+  const header = {};
+  if (token) header.Authorization = `Bearer ${token}`;
+
+  return new Promise((resolve, reject) => {
+    wx.downloadFile({
+      url: `${apiBase}${path}`,
+      header,
+      success(res) {
+        if (res.statusCode >= 200 && res.statusCode < 300 && res.tempFilePath) {
+          resolve(res);
+          return;
+        }
+        reject(new Error(`导出失败 ${res.statusCode || ''}`.trim()));
+      },
+      fail(err) {
+        reject(new Error(err.errMsg || '导出失败，请检查网络后重试'));
+      }
+    });
+  });
+}
+
 function loginWithWechat() {
   return new Promise((resolve, reject) => {
     wx.login({
@@ -75,6 +98,7 @@ function clearLogin() {
 
 module.exports = {
   clearLogin,
+  download,
   getToken,
   loginWithWechat,
   request,
