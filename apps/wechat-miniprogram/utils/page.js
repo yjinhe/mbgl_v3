@@ -40,6 +40,19 @@ function logoutToLogin(page) {
   page.setData({ authed: false, me: null, overview: null, records: {} });
 }
 
+function promptLoginForAction() {
+  wx.showModal({
+    title: '登录后保存',
+    content: '当前为功能演示，演示内容不会上传。登录后可将记录保存到个人账号。',
+    cancelText: '继续体验',
+    confirmText: '去登录',
+    confirmColor: '#0E7E6B',
+    success: (result) => {
+      if (result.confirm) wx.reLaunch({ url: '/pages/home/index' });
+    }
+  });
+}
+
 async function loadAppData(page) {
   if (!(await ensureLogin(page))) return;
   try {
@@ -82,5 +95,6 @@ module.exports = {
   doLogin,
   ensureLogin,
   loadAppData,
-  logoutToLogin
+  logoutToLogin,
+  promptLoginForAction
 };

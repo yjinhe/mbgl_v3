@@ -1,10 +1,11 @@
 const { request } = require('../../utils/api');
-const { doLogin, ensureLogin } = require('../../utils/page');
+const { ensureLogin } = require('../../utils/page');
+const { demoStats } = require('../../utils/demo');
 const { metrics } = require('../../utils/metrics');
 
 Page({
   data: {
-    authed: true,
+    authed: false,
     loading: false,
     metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === 'glucose', className: item.key === 'glucose' ? 'on' : '' })),
     metric: 'glucose',
@@ -29,10 +30,6 @@ Page({
     this.setMetricValue(selected);
   },
 
-  async login() {
-    await doLogin(this, () => this.load());
-  },
-
   setMetric(event) {
     this.setMetricValue(event.currentTarget.dataset.metric);
   },
@@ -55,11 +52,14 @@ Page({
   },
 
   async load() {
-    if (!(await ensureLogin(this))) return;
+    if (!(await ensureLogin(this))) {
+      this.setData(Object.assign({ authed: false, loading: false }, this.decorate(demoStats(this.data.metric, this.data.range))));
+      return;
+    }
     try {
       this.setData({ loading: true });
       const data = await request(`/api/app/stats?metric=${this.data.metric}&range=${this.data.range}`);
-      this.setData(this.decorate(data || {}));
+      this.setData(Object.assign({ authed: true }, this.decorate(data || {})));
     } catch (error) {
       wx.showToast({ title: error.message || '加载失败', icon: 'none' });
     } finally {

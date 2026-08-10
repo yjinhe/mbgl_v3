@@ -1,11 +1,12 @@
 const { doLogin, loadAppData } = require('../../utils/page');
+const { demoMe, demoOverview } = require('../../utils/demo');
 const { hasConsent } = require('../../utils/privacy');
 const { fmtMD, fmtTime, dayLabel, greetingAt, localDateLine } = require('../../utils/format');
 const { metrics, neutralStatusLabel, statusClass, statusStyle, periodNames } = require('../../utils/metrics');
 
 Page({
   data: {
-    authed: true,
+    authed: false,
     loading: true,
     greeting: greetingAt(),
     dateLine: localDateLine(),
@@ -54,11 +55,13 @@ Page({
 
   async refresh() {
     const data = await loadAppData(this);
-    if (!data) return;
-    const overview = data.overview || {};
-    const me = data.me || {};
+    const isDemo = !data;
+    const overview = isDemo ? demoOverview() : (data.overview || {});
+    const me = isDemo ? demoMe : (data.me || {});
     const cards = metrics.map((metric) => this.decorateMetric(metric, overview[metric.key], me));
     this.setData({
+      authed: !isDemo,
+      loading: false,
       greeting: greetingAt(),
       dateLine: localDateLine(),
       todayCount: overview.todayCount || 0,

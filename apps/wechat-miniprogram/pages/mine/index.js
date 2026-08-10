@@ -1,5 +1,5 @@
 const { download, request } = require('../../utils/api');
-const { doLogin, loadAppData, logoutToLogin } = require('../../utils/page');
+const { loadAppData, logoutToLogin } = require('../../utils/page');
 const { openPrivacyContract } = require('../../utils/privacy');
 
 function shareFile(filePath) {
@@ -19,7 +19,7 @@ function shareFile(filePath) {
 
 Page({
   data: {
-    authed: true,
+    authed: false,
     loading: false,
     me: null,
     sexMale: false,
@@ -43,15 +43,19 @@ Page({
     this.refresh();
   },
 
-  async login() {
-    await doLogin(this, () => this.refresh());
+  login() {
+    wx.reLaunch({ url: '/pages/home/index' });
   },
 
   async refresh() {
     const data = await loadAppData(this);
-    if (!data || !data.me) return;
+    if (!data || !data.me) {
+      this.setData({ authed: false, loading: false });
+      return;
+    }
     const me = data.me;
     this.setData({
+      authed: true,
       sexMale: me.sex === 'male',
       sexFemale: me.sex === 'female',
       unitMmol: me.unit !== 'mgdl',

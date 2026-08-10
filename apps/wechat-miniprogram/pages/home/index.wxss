@@ -1,5 +1,9 @@
 .login-card {
-  margin-top: 24vh;
+  margin-top: 24rpx;
+}
+
+.optional-login {
+  margin-top: 36rpx;
 }
 
 .me-head {

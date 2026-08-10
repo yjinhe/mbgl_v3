@@ -66,6 +66,27 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
+.demo-banner {
+  margin: 8rpx 0 22rpx;
+  padding: 22rpx 24rpx;
+  border: 1rpx solid #C9E5DC;
+  border-radius: 16rpx;
+  background: var(--brand-soft);
+}
+
+.demo-title {
+  color: var(--brand-deep);
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.demo-copy {
+  margin-top: 6rpx;
+  color: var(--ink-2);
+  font-size: 22rpx;
+  line-height: 1.55;
+}
+
 .app-stage {
   min-height: 100vh;
   background: var(--paper);

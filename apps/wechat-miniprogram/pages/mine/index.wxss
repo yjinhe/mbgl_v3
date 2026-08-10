@@ -122,3 +122,7 @@
 .account-delete.disabled {
   opacity: .55;
 }
+
+.guest-login {
+  margin-top: 28rpx;
+}

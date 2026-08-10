@@ -3,11 +3,10 @@
     <view class="safe-navbar" style="{{navStyle}}"><view class="title">历史记录</view></view>
     <view class="pages">
       <view class="page on">
-        <block wx:if="{{!authed}}">
-          <view class="empty">登录后查看历史记录</view>
-          <button class="btn primary" bindtap="login">微信一键登录</button>
-        </block>
-        <block wx:else>
+          <view wx:if="{{!authed}}" class="demo-banner">
+            <view class="demo-title">功能演示</view>
+            <view class="demo-copy">这里展示演示记录。切换指标可浏览不同记录样式。</view>
+          </view>
           <view class="msg">
             <button wx:for="{{metrics}}" wx:key="key" class="{{item.className}}" data-metric="{{item.key}}" bindtap="setMetric">{{item.name}}</button>
           </view>
@@ -19,11 +18,10 @@
               <view class="l2">{{item.noteText}}</view>
             </view>
             <view class="val num" style="{{item.statusStyle}}">{{item.readText}}</view>
-            <button class="delete-mini" data-id="{{item.id}}" catchtap="remove">删</button>
+            <button wx:if="{{authed}}" class="delete-mini" data-id="{{item.id}}" catchtap="remove">删</button>
           </view>
-          <button wx:if="{{nextCursor}}" class="btn line" loading="{{loading}}" bindtap="loadMore">加载更多</button>
-          <view class="foot-note">点击记录可编辑或删除 · 删除后 7 天内可在回收站找回</view>
-        </block>
+          <button wx:if="{{authed && nextCursor}}" class="btn line" loading="{{loading}}" bindtap="loadMore">加载更多</button>
+          <view class="foot-note">{{authed ? '删除后 7 天内可在回收站找回' : '演示记录不会上传或保存'}}</view>
       </view>
     </view>
     <view class="tabbar">

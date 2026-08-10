@@ -1,5 +1,6 @@
 const { request } = require('../../utils/api');
-const { doLogin, loadAppData } = require('../../utils/page');
+const { loadAppData, promptLoginForAction } = require('../../utils/page');
+const { demoMe } = require('../../utils/demo');
 const { toDateInput, toIsoFromInputs, toTimeInput } = require('../../utils/format');
 const {
   bpPeriods,
@@ -21,7 +22,7 @@ const {
 
 Page({
   data: {
-    authed: true,
+    authed: false,
     loading: false,
     saving: false,
     me: null,
@@ -76,17 +77,14 @@ Page({
     this.setMetricValue(selected);
     const data = await loadAppData(this);
     if (!data) {
-      wx.reLaunch({ url: '/pages/home/index' });
-      return;
+      this.setData({ authed: false, me: demoMe, loading: false });
+    } else {
+      this.setData({ authed: true });
     }
     this.setData({
       unitText: this.unitTextFor(this.data.metric)
     });
     this.updateLive();
-  },
-
-  async login() {
-    await doLogin(this, () => loadAppData(this));
   },
 
   setMetric(event) {
@@ -341,6 +339,10 @@ Page({
       } else {
         if (!this.data.value) throw new Error('请输入尿酸值');
         data = Object.assign(data, { value: Number(this.data.value), fasting: this.data.fasting });
+      }
+      if (!this.data.authed) {
+        promptLoginForAction();
+        return;
       }
       const result = await request(`/api/app/records/${metric}`, { method: 'POST', data });
       this.showToast(metric === 'glucose' ? `已记录 ${result.record.displayValue || this.data.value}` : '已记录');

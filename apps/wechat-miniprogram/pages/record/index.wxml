@@ -14,6 +14,10 @@
     <view class="sheet {{sheetOn}}">
       <view class="sheet-h"><text class="t">记一笔</text><button class="x" bindtap="closeSheet">×</button></view>
       <view class="sheet-body">
+        <view wx:if="{{!authed}}" class="demo-banner compact-demo">
+          <view class="demo-title">功能演示</view>
+          <view class="demo-copy">可完整操作录入面板。演示内容不会上传，保存时可自行选择登录。</view>
+        </view>
         <view class="msg">
           <button wx:for="{{metrics}}" wx:key="key" class="{{item.className}}" data-metric="{{item.key}}" bindtap="setMetric">{{item.name}}</button>
         </view>

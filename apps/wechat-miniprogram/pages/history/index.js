@@ -1,10 +1,11 @@
 const { request } = require('../../utils/api');
-const { doLogin, ensureLogin, decorateRecord } = require('../../utils/page');
+const { ensureLogin, decorateRecord } = require('../../utils/page');
+const { demoRecords } = require('../../utils/demo');
 const { metrics } = require('../../utils/metrics');
 
 Page({
   data: {
-    authed: true,
+    authed: false,
     loading: false,
     metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === 'glucose', className: item.key === 'glucose' ? 'on' : '' })),
     metric: 'glucose',
@@ -22,10 +23,6 @@ Page({
     this.load();
   },
 
-  async login() {
-    await doLogin(this, () => this.load());
-  },
-
   setMetric(event) {
     const metric = event.currentTarget.dataset.metric;
     this.setData({
@@ -35,8 +32,12 @@ Page({
   },
 
   async load(reset = true) {
-    if (!(await ensureLogin(this))) return;
     if (this.data.loading) return;
+    if (!(await ensureLogin(this))) {
+      const records = demoRecords(this.data.metric).map((item) => decorateRecord(this.data.metric, item));
+      this.setData({ records, nextCursor: null, hasRecords: records.length > 0, authed: false, loading: false });
+      return;
+    }
     try {
       this.setData({ loading: true });
       const cursor = reset ? null : this.data.nextCursor;
@@ -57,6 +58,7 @@ Page({
   },
 
   async remove(event) {
+    if (!this.data.authed) return;
     const id = event.currentTarget.dataset.id;
     wx.showModal({
       title: '删除记录？',

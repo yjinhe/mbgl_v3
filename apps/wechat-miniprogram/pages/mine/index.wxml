@@ -4,10 +4,19 @@
     <view class="pages">
       <view class="page on">
         <block wx:if="{{!authed}}">
-          <view class="login-card card">
-            <view class="me-head"><view class="avatar">糖</view><view><view class="n">糖迹</view><view class="d">登录后管理健康档案</view></view></view>
-            <button class="btn primary" bindtap="login">微信一键登录</button>
+          <view class="demo-banner">
+            <view class="demo-title">游客体验</view>
+            <view class="demo-copy">首页、历史、统计和记一笔均可免登录体验。登录仅用于保存和管理自己的记录。</view>
           </view>
+          <view class="me-head"><view class="avatar">糖</view><view><view class="n">糖迹</view><view class="d">个人健康数据记录工具</view></view></view>
+          <view class="sec-label">了解与选择</view>
+          <view class="card cell-card">
+            <view class="cell" bindtap="goTerms"><view class="cm"><view class="ct">用户协议</view></view><view class="cv">›</view></view>
+            <view class="cell" bindtap="goPrivacy"><view class="cm"><view class="ct">隐私政策</view></view><view class="cv">›</view></view>
+            <view class="cell" bindtap="openWechatPrivacy"><view class="cm"><view class="ct">微信隐私保护指引</view></view><view class="cv">›</view></view>
+          </view>
+          <button class="btn primary guest-login" bindtap="login">去登录并保存记录</button>
+          <view class="foot-note">登录为自愿选择，不授权手机号、头像或昵称</view>
         </block>
         <block wx:else>
           <view class="me-head"><view class="avatar">糖</view><view><view class="n">{{me.nickname}}</view><view class="d">已记录 {{me.stats.totalRecords}} 条 · 覆盖 {{me.stats.coveredDays}} 天</view></view></view>

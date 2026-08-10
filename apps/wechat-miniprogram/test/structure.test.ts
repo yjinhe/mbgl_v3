@@ -46,7 +46,7 @@ describe('wechat miniprogram structure', () => {
 
     expect(apiJs).toContain('Authorization');
     expect(apiJs).toContain('/api/app/auth/wechat');
-    expect(homeWxml).toContain('微信一键登录');
+    expect(homeWxml).toContain('微信登录并保存记录');
     expect(recordWxml).toContain('保存记录');
     expect(recordWxml).toContain('wx:for="{{metrics}}"');
     expect(metricsJs).toContain("name: '血糖'");
@@ -142,6 +142,46 @@ describe('wechat miniprogram structure', () => {
     expect(homeWxml).toContain('《用户协议》');
     expect(homeWxml).toContain('《隐私政策》');
     expect(mineWxml).toContain('微信隐私保护指引');
+  });
+
+  test('allows a useful guest experience before optional login', () => {
+    const homeWxml = fs.readFileSync(path.join(root, 'pages/home/index.wxml'), 'utf8');
+    const historyWxml = fs.readFileSync(path.join(root, 'pages/history/index.wxml'), 'utf8');
+    const statsWxml = fs.readFileSync(path.join(root, 'pages/stats/index.wxml'), 'utf8');
+    const recordWxml = fs.readFileSync(path.join(root, 'pages/record/index.wxml'), 'utf8');
+    const mineWxml = fs.readFileSync(path.join(root, 'pages/mine/index.wxml'), 'utf8');
+    const recordJs = fs.readFileSync(path.join(root, 'pages/record/index.js'), 'utf8');
+    const pageJs = fs.readFileSync(path.join(root, 'utils/page.js'), 'utf8');
+    const demoJs = fs.readFileSync(path.join(root, 'utils/demo.js'), 'utf8');
+
+    for (const markup of [homeWxml, historyWxml, statsWxml, recordWxml]) {
+      expect(markup).toContain('功能演示');
+    }
+    expect(mineWxml).toContain('游客体验');
+    expect(demoJs).toContain('demoOverview');
+    expect(demoJs).toContain('demoRecords');
+    expect(demoJs).toContain('demoStats');
+    expect(recordJs).not.toContain('wx.reLaunch');
+    expect(recordJs).toContain('promptLoginForAction()');
+    expect(pageJs).toContain("cancelText: '继续体验'");
+    expect(pageJs).toContain("confirmText: '去登录'");
+    expect(homeWxml.indexOf('功能演示')).toBeLessThan(homeWxml.indexOf('微信登录并保存记录'));
+  });
+
+  test('does not request phone number, avatar, or profile authorization', () => {
+    const jsFiles: string[] = [];
+    const walk = (directory: string) => {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        if (entry.name === 'test' || entry.name === 'node_modules') continue;
+        const filename = path.join(directory, entry.name);
+        if (entry.isDirectory()) walk(filename);
+        else if (path.extname(entry.name) === '.js') jsFiles.push(filename);
+      }
+    };
+    walk(root);
+
+    const source = jsFiles.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
+    expect(source).not.toMatch(/getPhoneNumber|getUserProfile|chooseAvatar/);
   });
 
   test('downloads authenticated exports and enables legal-domain checks', () => {

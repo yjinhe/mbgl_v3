@@ -6,21 +6,11 @@
 
     <view class="pages">
       <view class="page on">
-        <block wx:if="{{!authed}}">
-          <view class="login-card card">
-            <view class="me-head">
-              <view class="avatar">糖</view>
-              <view><view class="n">糖迹</view><view class="d">5 秒记一次健康数据</view></view>
-            </view>
-            <view class="consent-row" bindtap="toggleConsent">
-              <view class="consent-check {{consentChecked ? 'on' : ''}}">{{consentChecked ? '✓' : ''}}</view>
-              <view class="consent-copy">我已阅读并同意<text class="legal-link" catchtap="goTerms">《用户协议》</text>和<text class="legal-link" catchtap="goPrivacy">《隐私政策》</text>，并同意处理我主动填写的健康数据</view>
-            </view>
-            <button class="btn primary" loading="{{loading}}" bindtap="login">微信一键登录</button>
-          </view>
-        </block>
+        <view wx:if="{{!authed}}" class="demo-banner">
+          <view class="demo-title">功能演示</view>
+          <view class="demo-copy">以下均为演示数据，无需登录即可浏览和体验录入。</view>
+        </view>
 
-        <block wx:else>
           <view class="greet">
             <view>
               <view class="hello">{{greeting}}</view>
@@ -68,7 +58,18 @@
             </view>
           </block>
           <view class="foot-note">点击任意指标卡查看统计详情</view>
-        </block>
+
+        <view wx:if="{{!authed}}" class="login-card card optional-login">
+          <view class="me-head">
+            <view class="avatar">糖</view>
+            <view><view class="n">保存自己的记录</view><view class="d">体验完成后，可自行选择登录</view></view>
+          </view>
+          <view class="consent-row" bindtap="toggleConsent">
+            <view class="consent-check {{consentChecked ? 'on' : ''}}">{{consentChecked ? '✓' : ''}}</view>
+            <view class="consent-copy">我已阅读并同意<text class="legal-link" catchtap="goTerms">《用户协议》</text>和<text class="legal-link" catchtap="goPrivacy">《隐私政策》</text>，并同意处理我主动填写的健康数据</view>
+          </view>
+          <button class="btn primary" loading="{{loading}}" bindtap="login">微信登录并保存记录</button>
+        </view>
       </view>
     </view>
 

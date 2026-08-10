@@ -3,11 +3,10 @@
     <view class="safe-navbar" style="{{navStyle}}"><view class="title">健康统计</view></view>
     <view class="pages">
       <view class="page on">
-        <block wx:if="{{!authed}}">
-          <view class="empty">登录后查看健康统计</view>
-          <button class="btn primary" bindtap="login">微信一键登录</button>
-        </block>
-        <block wx:else>
+          <view wx:if="{{!authed}}" class="demo-banner">
+            <view class="demo-title">功能演示</view>
+            <view class="demo-copy">以下为演示统计。可切换指标和时间范围体验功能。</view>
+          </view>
           <view class="msg">
             <button wx:for="{{metrics}}" wx:key="key" class="{{item.className}}" data-metric="{{item.key}}" bindtap="setMetric">{{item.name}}</button>
           </view>
@@ -30,7 +29,6 @@
             </view>
           </view>
           <view class="foot-note">{{footnote}}</view>
-        </block>
       </view>
     </view>
     <view class="tabbar">
