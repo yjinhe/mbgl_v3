@@ -17,6 +17,7 @@ model User {
   passwordHash  String?
   authVersion   Int                @default(0)
   nickname      String             @default("微信用户")
+  avatarUrl     String?
   sex           String?
   unit          String             @default("mmol")
   fastingLow    Decimal            @default(4.4)

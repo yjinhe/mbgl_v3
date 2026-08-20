@@ -29,6 +29,16 @@ const metricSchema = z.enum(['glucose', 'bp', 'lipid', 'uric']);
 const loginNameSchema = z.string().trim().min(4).max(32).regex(/^[A-Za-z0-9_.-]+$/).transform((value) => value.toLowerCase());
 const appPasswordSchema = z.string().min(7).max(128);
 const invalidPasswordHash = '$2a$10$uTWjV9reQFAsAXui6E4MP.QvGzyLyN4HqFt8W7S2BYCaZH9XbGEMe';
+const MAX_AVATAR_BYTES = 128 * 1024;
+const avatarDataUrlSchema = z.string().refine((value) => {
+  const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+  if (!match) return false;
+  const bytes = Buffer.from(match[2]!, 'base64');
+  if (!bytes.length || bytes.length > MAX_AVATAR_BYTES) return false;
+  if (match[1] === 'jpeg') return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (match[1] === 'png') return bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  return bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP';
+}, '头像格式或大小不正确');
 const pageQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(100)
@@ -44,6 +54,7 @@ function publicAppUser(user: {
   id: string;
   loginName: string | null;
   nickname: string;
+  avatarUrl: string | null;
   sex: string | null;
   unit: string;
   passwordHash: string | null;
@@ -52,6 +63,7 @@ function publicAppUser(user: {
     id: user.id,
     loginName: user.loginName,
     nickname: user.nickname,
+    avatarUrl: user.avatarUrl,
     sex: user.sex,
     unit: user.unit,
     hasPassword: Boolean(user.passwordHash)
@@ -223,6 +235,7 @@ export async function appRoutes(app: FastifyInstance) {
       loginName: user.loginName,
       hasPassword: Boolean(user.passwordHash),
       nickname: user.nickname,
+      avatarUrl: user.avatarUrl,
       sex: user.sex,
       unit: user.unit,
       target: {
@@ -235,10 +248,15 @@ export async function appRoutes(app: FastifyInstance) {
     };
   });
 
-  app.patch('/me', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
+  app.patch('/me', {
+    bodyLimit: 256 * 1024,
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
     const user = await currentUser(app, request.auth as AppToken);
     const schema = z.object({
       nickname: z.string().max(30).optional(),
+      avatarUrl: avatarDataUrlSchema.nullable().optional(),
       sex: z.enum(['male', 'female']).nullable().optional(),
       unit: z.enum(['mmol', 'mgdl']).optional(),
       target: z
@@ -253,6 +271,7 @@ export async function appRoutes(app: FastifyInstance) {
       where: { id: user.id },
       data: {
         nickname: body.nickname,
+        avatarUrl: body.avatarUrl,
         sex: body.sex,
         unit: body.unit,
         fastingLow: body.target?.fastingLow,
@@ -263,6 +282,7 @@ export async function appRoutes(app: FastifyInstance) {
     return {
       id: updated.id,
       nickname: updated.nickname,
+      avatarUrl: updated.avatarUrl,
       sex: updated.sex,
       unit: updated.unit,
       target: {
@@ -295,7 +315,7 @@ export async function appRoutes(app: FastifyInstance) {
       await tx.uricRecord.deleteMany({ where: { userId: user.id } });
       await tx.user.update({
         where: { id: user.id },
-        data: { deactivatedAt: new Date(), nickname: '已注销用户', sex: null }
+        data: { deactivatedAt: new Date(), nickname: '已注销用户', avatarUrl: null, sex: null }
       });
     }, { timeout: 30_000 });
     return reply.code(204).send();
@@ -403,6 +423,18 @@ export async function appRoutes(app: FastifyInstance) {
       })));
     }
     return { items: items.sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime()) };
+  });
+
+  app.delete('/records/:metric/:id/permanent', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const metric = metricSchema.parse((request.params as any).metric);
+    const user = await currentUser(app, request.auth as AppToken);
+    const existing = await findRecord(app, metric, (request.params as any).id, user.id, true);
+    if (!existing || !existing.deletedAt) return notFound(reply);
+    await deleteRecordPermanently(app, metric, existing.id);
+    return reply.code(204).send();
   });
 
   app.post('/records/:metric/:id/restore', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
@@ -718,6 +750,13 @@ async function softDeleteRecord(app: FastifyInstance, metric: Metric, id: string
 
 async function restoreRecord(app: FastifyInstance, metric: Metric, id: string) {
   return modelFor(app, metric).update({ where: { id }, data: { deletedAt: null } });
+}
+
+async function deleteRecordPermanently(app: FastifyInstance, metric: Metric, id: string) {
+  await app.prisma.$transaction([
+    app.prisma.followUp.deleteMany({ where: { metric, recordId: id } }),
+    modelFor(app, metric).delete({ where: { id } })
+  ]);
 }
 
 function modelFor(app: FastifyInstance, metric: Metric): any {

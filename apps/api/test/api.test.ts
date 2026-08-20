@@ -40,7 +40,11 @@ beforeAll(async () => {
   process.env.DATABASE_URL = `file:${path.join(dir, 'test.db')}`;
   process.env.JWT_SECRET = 'test-secret';
   process.env.WECHAT_MOCK = 'true';
-  execFileSync('pnpm', ['--filter', '@tangji/api', 'prisma:generate'], { stdio: 'pipe' });
+  execFileSync(path.resolve('apps/api/node_modules/.bin/prisma'), [
+    'generate',
+    '--schema',
+    path.resolve('apps/api/prisma/schema.prisma')
+  ], { stdio: 'pipe' });
   prisma = new PrismaClient();
   await createSqliteSchema(prisma);
   app = await buildApp({ prisma });
@@ -87,6 +91,39 @@ afterAll(async () => {
 });
 
 describe('app account authentication', () => {
+  test('persists an explicitly selected avatar and rejects invalid image data', async () => {
+    const avatarUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+    const updated = await request(app.server)
+      .patch('/api/app/me')
+      .set('Authorization', `Bearer ${appToken}`)
+      .send({ avatarUrl })
+      .expect(200);
+    expect(updated.body.avatarUrl).toBe(avatarUrl);
+
+    const me = await request(app.server)
+      .get('/api/app/me')
+      .set('Authorization', `Bearer ${appToken}`)
+      .expect(200);
+    expect(me.body.avatarUrl).toBe(avatarUrl);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).avatarUrl).toBe(avatarUrl);
+
+    await request(app.server)
+      .patch('/api/app/me')
+      .set('Authorization', `Bearer ${appToken}`)
+      .send({ avatarUrl: 'data:image/png;base64,bm90LWFuLWltYWdl' })
+      .expect(422);
+
+    const oversizedPng = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(128 * 1024)
+    ]).toString('base64');
+    await request(app.server)
+      .patch('/api/app/me')
+      .set('Authorization', `Bearer ${appToken}`)
+      .send({ avatarUrl: `data:image/png;base64,${oversizedPng}` })
+      .expect(422);
+  });
+
   test('registers a normalized local account and returns a safe session', async () => {
     const password = '1234567';
     const response = await request(app.server)
@@ -253,10 +290,24 @@ describe('app records', () => {
       .send({ value: 7.8, unit: 'mmol', period: 'after_lunch', measuredAt: new Date().toISOString() })
       .expect(201);
     const id = created.body.record.id;
+    expect(created.body.record.displayUnit).toBe('mmol/L');
     await request(app.server).delete(`/api/app/records/glucose/${id}`).set('Authorization', `Bearer ${appToken}`).expect(204);
     const recycle = await request(app.server).get('/api/app/records/recycle-bin').set('Authorization', `Bearer ${appToken}`).expect(200);
     expect(recycle.body.items.some((item: any) => item.id === id)).toBe(true);
     await request(app.server).post(`/api/app/records/glucose/${id}/restore`).set('Authorization', `Bearer ${appToken}`).expect(200);
+  });
+
+  test('permanently deletes only records already in the recycle bin', async () => {
+    const created = await request(app.server)
+      .post('/api/app/records/bp')
+      .set('Authorization', `Bearer ${appToken}`)
+      .send({ sbp: 128, dbp: 78, period: 'morning', measuredAt: new Date().toISOString() })
+      .expect(201);
+    const id = created.body.record.id;
+    await request(app.server).delete(`/api/app/records/bp/${id}/permanent`).set('Authorization', `Bearer ${appToken}`).expect(404);
+    await request(app.server).delete(`/api/app/records/bp/${id}`).set('Authorization', `Bearer ${appToken}`).expect(204);
+    await request(app.server).delete(`/api/app/records/bp/${id}/permanent`).set('Authorization', `Bearer ${appToken}`).expect(204);
+    expect(await prisma.bpRecord.findUnique({ where: { id } })).toBeNull();
   });
 
   test('hides expired recycle records and purges them permanently', async () => {

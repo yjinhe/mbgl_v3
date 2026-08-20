@@ -146,6 +146,7 @@ export function serializeGlucose(record: any, user: any, unit: Unit = 'mmol') {
     metric: 'glucose' as const,
     valueMmol,
     displayValue: displayGlucose(valueMmol, unit),
+    displayUnit: unit === 'mgdl' ? 'mg/dL' : 'mmol/L',
     period,
     periodName: periodName(period),
     measuredAt: record.measuredAt.toISOString(),

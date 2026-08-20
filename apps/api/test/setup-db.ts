@@ -13,6 +13,7 @@ export async function createSqliteSchema(prisma: PrismaClient) {
       "passwordHash" TEXT,
       "authVersion" INTEGER NOT NULL DEFAULT 0,
       "nickname" TEXT NOT NULL DEFAULT '微信用户',
+      "avatarUrl" TEXT,
       "sex" TEXT,
       "unit" TEXT NOT NULL DEFAULT 'mmol',
       "fastingLow" DECIMAL NOT NULL DEFAULT 4.4,
