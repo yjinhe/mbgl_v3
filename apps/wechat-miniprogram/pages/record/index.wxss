@@ -1,3 +1,217 @@
 .compact-demo {
   margin-top: 0;
+  margin-bottom: 16rpx;
+  padding: 18rpx 20rpx;
+}
+
+.compact-demo .demo-title {
+  font-size: 28rpx;
+}
+
+.compact-demo .demo-copy {
+  font-size: 27rpx;
+  line-height: 1.55;
+}
+
+.sheet-h {
+  padding: 20rpx 28rpx 8rpx;
+}
+
+.sheet-h .t {
+  font-size: 36rpx;
+}
+
+.sheet-h .x {
+  width: 88rpx;
+  height: 88rpx;
+  font-size: 34rpx;
+}
+
+.sheet-body {
+  padding-right: 28rpx;
+  padding-left: 28rpx;
+}
+
+.sheet .msg button {
+  min-height: 84rpx;
+  font-size: 30rpx;
+}
+
+.time-row {
+  width: 100%;
+  min-height: 84rpx;
+  margin: 12rpx 0 10rpx;
+  padding: 0 16rpx;
+  display: flex;
+}
+
+.time-picker {
+  flex: 1.35;
+  min-width: 0;
+}
+
+.time-picker-short {
+  flex: 1;
+}
+
+.time-cell {
+  min-height: 84rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+}
+
+.time-label {
+  color: var(--ink-2);
+  font-size: 26rpx;
+  font-weight: 650;
+}
+
+.time-value {
+  color: var(--ink);
+  font-size: 29rpx;
+  font-weight: 600;
+}
+
+.time-arrow {
+  color: var(--ink-3);
+  font-size: 30rpx;
+}
+
+.time-divider {
+  width: 1rpx;
+  height: 40rpx;
+  align-self: center;
+  background: var(--line);
+}
+
+.live-status {
+  font-size: 30rpx;
+}
+
+.f-label {
+  font-size: 29rpx;
+}
+
+.f-label .hint {
+  font-size: 25rpx;
+}
+
+.sheet .chip {
+  min-height: 84rpx;
+  font-size: 29rpx;
+}
+
+.bp-fields {
+  gap: 12rpx;
+}
+
+.bpf {
+  min-height: 150rpx;
+  padding-right: 6rpx;
+  padding-left: 6rpx;
+}
+
+.bpf .fl {
+  font-size: 27rpx;
+}
+
+.bpf .fu {
+  font-size: 25rpx;
+}
+
+.lp-row {
+  min-height: 112rpx;
+  padding: 16rpx 20rpx;
+  gap: 12rpx;
+}
+
+.lp-row .ln {
+  width: 190rpx;
+  font-size: 27rpx;
+}
+
+.lp-row .ln .sub {
+  font-size: 24rpx;
+}
+
+.lp-row input {
+  min-width: 0;
+  font-size: 34rpx;
+}
+
+.lp-status {
+  width: 82rpx;
+  flex: none;
+  color: var(--ink-3);
+  font-size: 25rpx;
+  text-align: right;
+}
+
+.fast-row {
+  font-size: 28rpx;
+}
+
+.fast-row .switch {
+  width: 150rpx;
+  height: 84rpx;
+  font-size: 27rpx;
+}
+
+.fast-row .switch-knob {
+  top: 6rpx;
+  left: 8rpx;
+  width: 72rpx;
+  height: 72rpx;
+}
+
+.fast-row .switch.on .switch-knob {
+  left: 70rpx;
+}
+
+.note-in {
+  height: 88rpx;
+  font-size: 28rpx;
+}
+
+.scroll-affordance {
+  flex: none;
+  padding: 7rpx 20rpx;
+  background: #EBF0ED;
+  color: var(--ink-2);
+  font-size: 26rpx;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.keypad {
+  padding: 12rpx;
+  gap: 10rpx;
+  border-radius: 36rpx 36rpx 0 0;
+}
+
+.key {
+  width: calc((100% - 20rpx) / 3);
+  height: 96rpx;
+  flex-basis: calc((100% - 20rpx) / 3);
+}
+
+.key.fn {
+  font-size: 30rpx;
+}
+
+.key.fn.disabled {
+  color: #A5B0AC;
+  background: #E7ECE9;
+}
+
+.record-actions {
+  padding: 12rpx 18rpx calc(16rpx + env(safe-area-inset-bottom));
+}
+
+.record-actions .record-save {
+  width: 100%;
+  max-width: none;
 }

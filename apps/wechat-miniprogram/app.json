@@ -16,6 +16,45 @@
     "backgroundColor": "#F2F5F3",
     "navigationStyle": "custom"
   },
+  "tabBar": {
+    "custom": true,
+    "color": "#7A8A85",
+    "selectedColor": "#0E7E6B",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页",
+        "iconPath": "assets/home-icons/nav-home.png",
+        "selectedIconPath": "assets/home-icons/nav-home-active.png"
+      },
+      {
+        "pagePath": "pages/history/index",
+        "text": "历史",
+        "iconPath": "assets/home-icons/nav-history.png",
+        "selectedIconPath": "assets/home-icons/nav-history.png"
+      },
+      {
+        "pagePath": "pages/record/index",
+        "text": "记一笔",
+        "iconPath": "assets/home-icons/nav-record.png",
+        "selectedIconPath": "assets/home-icons/nav-record.png"
+      },
+      {
+        "pagePath": "pages/stats/index",
+        "text": "统计",
+        "iconPath": "assets/home-icons/nav-stats.png",
+        "selectedIconPath": "assets/home-icons/nav-stats.png"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的",
+        "iconPath": "assets/home-icons/nav-mine.png",
+        "selectedIconPath": "assets/home-icons/nav-mine.png"
+      }
+    ]
+  },
   "__usePrivacyCheck__": true,
   "style": "v2",
   "sitemapLocation": "sitemap.json"

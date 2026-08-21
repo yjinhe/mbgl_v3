@@ -130,8 +130,20 @@ function uricStatus(value, sex) {
   return { key: 'dhigh', label: '明显偏高' };
 }
 
-function readRecord(metric, record) {
-  if (metric === 'glucose') return `${record.displayValue || record.valueMmol} mmol/L`;
+function glucoseUnitText(unit) {
+  return unit === 'mgdl' ? 'mg/dL' : 'mmol/L';
+}
+
+function displayGlucoseValue(valueMmol, unit) {
+  if (valueMmol == null) return '—';
+  return unit === 'mgdl' ? String(Math.round(Number(valueMmol) * 18)) : Number(valueMmol).toFixed(1);
+}
+
+function readRecord(metric, record, unit = 'mmol') {
+  if (metric === 'glucose') {
+    const displayUnit = record.displayUnit || glucoseUnitText(unit);
+    return `${record.displayValue || record.valueMmol} ${displayUnit}`;
+  }
   if (metric === 'bp') return `${record.sbp}/${record.dbp} mmHg${record.pulse ? ` · ♥${record.pulse}` : ''}`;
   if (metric === 'uric') return `${record.value} μmol/L`;
   return lipidItems
@@ -147,6 +159,8 @@ module.exports = {
   glucosePeriods,
   glucoseStatus,
   glucoseTags,
+  glucoseUnitText,
+  displayGlucoseValue,
   inferBpPeriod,
   inferGlucosePeriod,
   lipidItemStatus,

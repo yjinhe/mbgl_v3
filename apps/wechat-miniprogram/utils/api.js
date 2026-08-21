@@ -1,18 +1,31 @@
 let apiBase = 'https://tangji.aiteam.pw';
 
 const TOKEN_KEY = 'tangji_app_token';
+let tokenLoaded = false;
+let tokenCache = '';
 
 function setApiBase(base) {
   apiBase = String(base || '').replace(/\/$/, '');
 }
 
 function getToken() {
-  return wx.getStorageSync(TOKEN_KEY) || '';
+  if (!tokenLoaded) {
+    tokenCache = wx.getStorageSync(TOKEN_KEY) || '';
+    tokenLoaded = true;
+  }
+  return tokenCache;
 }
 
 function setToken(token) {
-  if (token) wx.setStorageSync(TOKEN_KEY, token);
+  const nextToken = token || '';
+  const previousToken = getToken();
+  if (nextToken) wx.setStorageSync(TOKEN_KEY, nextToken);
   else wx.removeStorageSync(TOKEN_KEY);
+  tokenCache = nextToken;
+  tokenLoaded = true;
+  if (nextToken !== previousToken) {
+    require('./data-cache').resetSessionData();
+  }
 }
 
 function request(path, options = {}) {
@@ -34,10 +47,17 @@ function request(path, options = {}) {
         const message = res.data && res.data.error && res.data.error.message
           ? res.data.error.message
           : `请求失败 ${res.statusCode}`;
-        reject(new Error(message));
+        const error = new Error(message);
+        error.statusCode = res.statusCode;
+        error.code = res.data && res.data.error && res.data.error.code
+          ? res.data.error.code
+          : 'HTTP_ERROR';
+        reject(error);
       },
       fail(err) {
-        reject(new Error(err.errMsg || '网络异常'));
+        const error = new Error(err.errMsg || '网络异常');
+        error.code = 'NETWORK_ERROR';
+        reject(error);
       }
     });
   });

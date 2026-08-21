@@ -11,25 +11,19 @@
             <button wx:for="{{metrics}}" wx:key="key" class="{{item.className}}" data-metric="{{item.key}}" bindtap="setMetric">{{item.name}}</button>
           </view>
           <view wx:if="{{!hasRecords}}" class="empty">暂无记录</view>
-          <view wx:for="{{records}}" wx:key="id" class="rec">
+          <view wx:for="{{records}}" wx:key="id" class="rec card">
             <view class="bar" style="background:{{item.statusColorValue}}"></view>
-            <view class="mid">
-              <view class="l1">{{item.periodText}}<text class="tm num">{{item.dateText}} {{item.timeText}}</text><text class="pill {{item.statusClass}}">{{item.status.label}}</text></view>
-              <view class="l2">{{item.noteText}}</view>
+            <view class="mid record-main">
+              <view class="l1 record-head"><text>{{item.periodText}}</text><text class="pill {{item.statusClass}}">{{item.status.label}}</text></view>
+              <view class="tm num">{{item.dateText}} {{item.timeText}}</view>
+              <view class="val num" style="{{item.statusStyle}}">{{item.readText}}</view>
+              <view wx:if="{{item.hasNote}}" class="l2">备注：{{item.noteText}}</view>
             </view>
-            <view class="val num" style="{{item.statusStyle}}">{{item.readText}}</view>
-            <button wx:if="{{authed}}" class="delete-mini" data-id="{{item.id}}" catchtap="remove">删</button>
+            <button wx:if="{{authed}}" class="delete-mini" data-id="{{item.id}}" catchtap="remove">删除</button>
           </view>
           <button wx:if="{{authed && nextCursor}}" class="btn line" loading="{{loading}}" bindtap="loadMore">加载更多</button>
           <view class="foot-note">{{authed ? '删除后 7 天内可在回收站找回' : '演示记录不会上传或保存'}}</view>
       </view>
-    </view>
-    <view class="tabbar">
-      <button class="tab" data-tab="home" bindtap="switchPage"><text class="ti">⌂</text><text>首页</text></button>
-      <button class="tab on" data-tab="history" bindtap="switchPage"><text class="ti">☰</text><text>历史</text></button>
-      <view class="fab-slot"><button class="fab" data-tab="record" bindtap="switchPage"><view class="drop"></view></button><text class="fab-label">记一笔</text></view>
-      <button class="tab" data-tab="stats" bindtap="switchPage"><text class="ti">↗</text><text>统计</text></button>
-      <button class="tab" data-tab="mine" bindtap="switchPage"><text class="ti">◯</text><text>我的</text></button>
     </view>
   </view>
 </view>

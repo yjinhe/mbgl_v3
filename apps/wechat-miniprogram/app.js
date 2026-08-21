@@ -31,7 +31,8 @@ App({
     const buttonTop = capsule && capsule.top ? capsule.top : statusBarHeight + 6;
     const navGap = Math.max(4, buttonTop - statusBarHeight);
     const navHeight = statusBarHeight + buttonHeight + navGap * 2;
+    const titleY = buttonTop + buttonHeight / 2;
     const menuRight = capsule && capsule.left ? Math.max(96, windowWidth - capsule.left + 12) : 116;
-    return `padding-top:${statusBarHeight}px;height:${navHeight}px;padding-right:${menuRight}px`;
+    return `padding-top:${statusBarHeight}px;height:${navHeight}px;padding-right:${menuRight}px;--nav-title-y:${titleY}px`;
   }
 });

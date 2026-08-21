@@ -31,12 +31,5 @@
           <view class="foot-note">{{footnote}}</view>
       </view>
     </view>
-    <view class="tabbar">
-      <button class="tab" data-tab="home" bindtap="switchPage"><text class="ti">⌂</text><text>首页</text></button>
-      <button class="tab" data-tab="history" bindtap="switchPage"><text class="ti">☰</text><text>历史</text></button>
-      <view class="fab-slot"><button class="fab" data-tab="record" bindtap="switchPage"><view class="drop"></view></button><text class="fab-label">记一笔</text></view>
-      <button class="tab on" data-tab="stats" bindtap="switchPage"><text class="ti">↗</text><text>统计</text></button>
-      <button class="tab" data-tab="mine" bindtap="switchPage"><text class="ti">◯</text><text>我的</text></button>
-    </view>
   </view>
 </view>

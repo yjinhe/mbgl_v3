@@ -8,6 +8,9 @@ type MiniMetrics = {
   glucoseStatus(value: number, period: string, target?: unknown): { key: string };
   lipidItemStatus(key: string, value: number): { key: string };
   uricStatus(value: number, sex: string): { key: string };
+  displayGlucoseValue(value: number | null, unit: string): string;
+  glucoseUnitText(unit: string): string;
+  readRecord(metric: string, record: Record<string, unknown>, unit?: string): string;
 };
 
 function loadMiniMetrics(): MiniMetrics {
@@ -43,5 +46,13 @@ describe('mini-program metric rules match shared domain rules', () => {
     for (const [value, sex] of [[149, 'male'], [420, 'male'], [421, 'male'], [360, 'female'], [541, 'female']] as const) {
       expect(mini.uricStatus(value, sex).key).toBe(uricStatus(value, sex).key);
     }
+  });
+
+  test('formats glucose values and units consistently', () => {
+    expect(mini.displayGlucoseValue(7.2, 'mmol')).toBe('7.2');
+    expect(mini.displayGlucoseValue(7.2, 'mgdl')).toBe('130');
+    expect(mini.glucoseUnitText('mgdl')).toBe('mg/dL');
+    expect(mini.readRecord('glucose', { displayValue: '130', valueMmol: 7.2 }, 'mgdl')).toBe('130 mg/dL');
+    expect(mini.readRecord('glucose', { displayValue: '7.2', displayUnit: 'mmol/L', valueMmol: 7.2 }, 'mgdl')).toBe('7.2 mmol/L');
   });
 });

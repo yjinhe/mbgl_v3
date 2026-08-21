@@ -26,7 +26,10 @@
               <view class="record-sub">{{item.dateText}} {{item.timeText}} · 剩余 {{item.daysLeft}} 天</view>
               <view class="record-value num" style="{{item.statusStyle}}">{{item.readText}}</view>
             </view>
-            <button class="restore" data-metric="{{item.metric}}" data-id="{{item.id}}" catchtap="restore">恢复</button>
+            <view class="record-ops">
+              <button class="restore" data-metric="{{item.metric}}" data-id="{{item.id}}" catchtap="restore">恢复</button>
+              <button class="purge" data-metric="{{item.metric}}" data-id="{{item.id}}" catchtap="removePermanently">永久删除</button>
+            </view>
           </view>
         </block>
       </view>

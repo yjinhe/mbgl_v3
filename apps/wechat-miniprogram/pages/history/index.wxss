@@ -2,13 +2,70 @@
   margin: 8rpx 0 20rpx;
 }
 
+.rec {
+  position: relative;
+  padding: 24rpx 22rpx 24rpx 34rpx;
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+}
+
+.rec .bar {
+  position: absolute;
+  left: 0;
+  top: 24rpx;
+  bottom: 24rpx;
+  width: 8rpx;
+  border-radius: 0 999rpx 999rpx 0;
+}
+
+.record-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.record-head {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  color: var(--ink);
+  font-size: 27rpx;
+  font-weight: 750;
+}
+
+.record-head .pill {
+  min-height: 38rpx;
+  padding: 6rpx 14rpx;
+  font-size: 21rpx;
+}
+
+.tm {
+  margin-top: 8rpx;
+  color: var(--ink-3);
+  font-size: 24rpx;
+}
+
+.rec .val {
+  margin-top: 12rpx;
+  font-size: 34rpx;
+  font-weight: 750;
+}
+
+.rec .l2 {
+  margin-top: 8rpx;
+  color: var(--ink-2);
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
 .delete-mini {
-  width: 52rpx;
-  height: 52rpx;
+  width: 104rpx;
+  height: 72rpx;
+  flex: 0 0 104rpx;
   border-radius: 18rpx;
   align-self: center;
   background: var(--danger-soft);
   color: var(--danger);
-  font-size: 22rpx;
+  font-size: 24rpx;
   font-weight: 750;
 }

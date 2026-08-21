@@ -1,0 +1,30 @@
+<view wx:if="{{!hidden}}" class="tabbar" aria-label="主导航">
+  <block wx:for="{{items}}" wx:key="pagePath">
+    <button
+      wx:if="{{item.key === 'record'}}"
+      class="fab-slot"
+      data-index="{{index}}"
+      aria-label="记一笔"
+      hover-class="tab-pressed"
+      hover-start-time="0"
+      hover-stay-time="80"
+      bindtap="switchTab"
+    >
+      <view class="fab"><image src="{{item.iconPath}}" mode="aspectFit" /></view>
+      <text class="fab-label">{{item.text}}</text>
+    </button>
+    <button
+      wx:else
+      class="tab {{selected === index ? 'on' : ''}}"
+      data-index="{{index}}"
+      aria-label="{{item.text}}"
+      hover-class="tab-pressed"
+      hover-start-time="0"
+      hover-stay-time="80"
+      bindtap="switchTab"
+    >
+      <image class="ti" src="{{item.iconPath}}" mode="aspectFit" />
+      <text>{{item.text}}</text>
+    </button>
+  </block>
+</view>

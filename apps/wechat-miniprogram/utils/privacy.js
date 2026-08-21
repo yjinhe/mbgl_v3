@@ -1,12 +1,20 @@
 const CONSENT_KEY = 'tangji_privacy_consent';
-const CONSENT_VERSION = '2026-07-27';
+const CONSENT_VERSION = '2026-08-19';
+let consentLoaded = false;
+let consentCache = false;
 
 function hasConsent() {
-  return wx.getStorageSync(CONSENT_KEY) === CONSENT_VERSION;
+  if (!consentLoaded) {
+    consentCache = wx.getStorageSync(CONSENT_KEY) === CONSENT_VERSION;
+    consentLoaded = true;
+  }
+  return consentCache;
 }
 
 function saveConsent() {
   wx.setStorageSync(CONSENT_KEY, CONSENT_VERSION);
+  consentCache = true;
+  consentLoaded = true;
 }
 
 function ensurePlatformPrivacyAuthorization() {

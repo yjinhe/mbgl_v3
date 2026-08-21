@@ -3,11 +3,22 @@
 }
 
 .range-row {
+  overflow: visible;
   padding-bottom: 14rpx;
+}
+
+.range-row .chip {
+  width: 0;
+  flex: 1 1 0;
 }
 
 .trend-card {
   margin-top: 4rpx;
+}
+
+.metric .k,
+.metric .unit {
+  font-size: 24rpx;
 }
 
 .bars {
@@ -15,11 +26,13 @@
   padding: 24rpx 8rpx 0;
   display: flex;
   align-items: flex-end;
+  justify-content: center;
   gap: 10rpx;
 }
 
 .bar-wrap {
   flex: 1;
+  max-width: 44rpx;
   display: flex;
   align-items: flex-end;
 }

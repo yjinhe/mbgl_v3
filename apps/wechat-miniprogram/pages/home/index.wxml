@@ -5,61 +5,104 @@
     </view>
 
     <view class="pages">
-      <view class="page on">
+      <view class="page on home-page">
         <view wx:if="{{!authed}}" class="demo-banner">
           <view class="demo-title">功能演示</view>
           <view class="demo-copy">以下均为演示数据，无需登录即可浏览和体验录入。</view>
         </view>
 
-          <view class="greet">
-            <view>
-              <view class="hello">{{greeting}}</view>
-              <view class="date">{{dateLine}} · 今天已记 {{todayCount}} 笔</view>
-            </view>
-            <view class="streak">连续记录 {{streak}} 天</view>
+        <view wx:if="{{!authed && pendingRecordAfterLoad}}" class="pending-login">
+          <view class="pending-login-title">本次填写内容已保留</view>
+          <view class="pending-login-copy">登录成功后会自动保存，不需要重新填写。</view>
+          <view class="consent-row" bindtap="toggleConsent">
+            <view class="consent-check {{consentChecked ? 'on' : ''}}">{{consentChecked ? '✓' : ''}}</view>
+            <view class="consent-copy">我已阅读并同意<text class="legal-link" catchtap="goTerms">《用户协议》</text>和<text class="legal-link" catchtap="goPrivacy">《隐私政策》</text>，并同意处理我主动填写的健康数据</view>
           </view>
+          <button class="btn primary" loading="{{loading}}" bindtap="login">微信登录并保存本次记录</button>
+        </view>
 
-          <block wx:for="{{cards}}" wx:key="key">
-            <view wx:if="{{item.isGlucose}}" class="hero" data-metric="{{item.key}}" bindtap="goStats">
-              <block wx:if="{{item.empty}}">
-                <view class="hero-empty">还没有记录
+        <view wx:if="{{authed && pendingRecordAfterLoad}}" class="pending-login">
+          <view class="pending-login-title">本次记录还没有保存成功</view>
+          <view wx:if="{{pendingRecordSummary}}" class="pending-login-copy">{{pendingRecordSummary}} · {{pendingRecordTimeText}}</view>
+          <view class="pending-login-copy">{{pendingRecordError ? '保存失败：' + pendingRecordError : '正在安全保存本次填写内容…'}}</view>
+          <button class="btn primary" loading="{{savingPendingRecord}}" disabled="{{savingPendingRecord}}" bindtap="savePendingRecord">重新保存</button>
+          <view class="nickname-actions">
+            <button class="btn line" disabled="{{savingPendingRecord}}" bindtap="editPendingRecord">返回修改</button>
+            <button class="btn line" disabled="{{savingPendingRecord}}" bindtap="discardPendingRecord">放弃记录</button>
+          </view>
+        </view>
+
+        <view class="greet">
+          <view>
+            <view class="hello">{{greeting}}</view>
+            <view class="date">{{dateLine}} · 今天已记 {{todayCount}} 笔</view>
+          </view>
+        </view>
+
+        <view class="streak home-streak">
+          <image class="streak-icon" src="/assets/home-icons/streak.png" mode="aspectFit" />
+          <text>{{streakMessage}}</text>
+        </view>
+
+        <view class="home-section-title">今日总览</view>
+        <view wx:if="{{allMetricsEmpty}}" class="overview-empty" data-metric="glucose" bindtap="goRecord">
+          <view class="overview-empty-title">还没有记录</view>
+          <view class="overview-empty-copy">点下方水滴按钮，记下第一条</view>
+        </view>
+        <view wx:else class="overview-grid">
+          <button
+            wx:for="{{overviewItems}}"
+            wx:key="key"
+            class="overview-item metric-{{item.key}} state-{{item.overviewState}} {{item.statusClass}}"
+            data-metric="{{item.key}}"
+            bindtap="goStats"
+          >
+            <view class="overview-icon">
+              <image src="{{item.overviewIconSrc}}" mode="aspectFit" />
+            </view>
+            <text class="overview-name">{{item.name}}</text>
+            <text class="overview-status">{{item.overviewStatusLabel}}</text>
+          </button>
+        </view>
+
+        <view wx:if="{{glucoseCard}}" class="hero" data-metric="{{glucoseCard.key}}" bindtap="goStats">
+          <block wx:if="{{glucoseCard.empty}}">
+            <view class="hero-empty">还没有记录
 点下方水滴按钮，记下第一条血糖</view>
-              </block>
-              <block wx:else>
-                <view class="lab"><text>血糖 · 最近一次 · {{item.periodText}}</text><text class="num">{{item.dateText}} {{item.timeText}}</text></view>
-                <view class="read"><text class="v num">{{item.valueText}}</text><text class="u">{{item.unitText}}</text></view>
-                <view class="meta"><text class="pill {{item.statusClass}}">● {{item.statusLabel}}</text><text>{{item.targetText}}</text></view>
-                <view class="gauge"><view class="band" style="left:{{item.bandLeft}};width:{{item.bandWidth}}"></view><view class="dot" style="left:{{item.dotLeft}};background:{{item.statusColorValue}}"></view></view>
-                <view class="gx num"><text>2.0</text><text>10.0</text><text>20.0</text></view>
-              </block>
-            </view>
-
-            <view wx:elif="{{!item.isGlucose}}" class="mcard" data-metric="{{item.key}}" bindtap="goStats">
-              <view class="brow">
-                <view class="mic" style="{{item.softStyle}}">{{item.iconText}}</view>
-                <text class="bt">{{item.name}}</text>
-                <text wx:if="{{!item.empty}}">{{item.headLeftText}}</text>
-                <text wx:if="{{!item.empty}}" class="when num">{{item.headTimeText}}</text>
-              </view>
-              <view wx:if="{{item.empty}}" class="empty" data-metric="{{item.key}}" catchtap="goRecord">还没有{{item.name}}记录 · 点下方按钮记一笔</view>
-              <block wx:else>
-                <view wx:if="{{item.isBp}}">
-                  <view class="mainrow"><text class="mv num" style="{{item.statusStyle}}">{{item.valueText}}</text><text class="mu">mmHg</text><text class="mu">{{item.extraText}}</text><text class="pill {{item.statusClass}}">{{item.statusLabel}}</text></view>
-                  <view class="sub">{{item.subText}}</view>
-                </view>
-                <view wx:elif="{{item.isLipid}}" class="lgrid">
-                  <view wx:for="{{item.lipid}}" wx:key="label" class="li"><text>{{item.label}}</text><text class="strong num" style="{{item.style}}">{{item.value}}</text></view>
-                </view>
-                <view wx:else>
-                  <view class="mainrow"><text class="mv num" style="{{item.statusStyle}}">{{item.valueText}}</text><text class="mu">μmol/L</text><text class="pill {{item.statusClass}}">{{item.statusLabel}}</text></view>
-                  <view class="sub">{{item.subText}}</view>
-                </view>
-              </block>
-            </view>
           </block>
-          <view class="foot-note">点击任意指标卡查看统计详情</view>
+          <block wx:else>
+            <view class="lab"><text>血糖 · 最近一次 · {{glucoseCard.periodText}}</text><text class="num">{{glucoseCard.dateText}} {{glucoseCard.timeText}}</text></view>
+            <view class="read"><text class="v num">{{glucoseCard.valueText}}</text><text class="u">{{glucoseCard.unitText}}</text></view>
+            <view class="meta"><text class="pill {{glucoseCard.statusClass}}">{{glucoseCard.statusLabel}}</text><text>{{glucoseCard.targetText}}</text></view>
+            <view class="gauge"><view class="band" style="left:{{glucoseCard.bandLeft}};width:{{glucoseCard.bandWidth}}"></view><view class="dot {{glucoseCard.statusClass}}" style="left:{{glucoseCard.dotLeft}}"></view></view>
+            <view class="gx num"><text>2.0</text><text>10.0</text><text>20.0</text></view>
+          </block>
+        </view>
 
-        <view wx:if="{{!authed}}" class="login-card card optional-login">
+        <view class="home-section-title support-title">血压与尿酸</view>
+        <view class="support-grid">
+          <view wx:for="{{supportCards}}" wx:key="key" class="mcard support-card metric-{{item.key}}" data-metric="{{item.key}}" bindtap="goStats">
+            <view class="support-head">
+              <view class="support-icon"><image src="{{item.metricIconSrc}}" mode="aspectFit" /></view>
+              <text>{{item.name}}</text>
+            </view>
+            <view wx:if="{{item.empty}}" class="support-empty" data-metric="{{item.key}}" catchtap="goRecord">
+              <text class="support-empty-main">未记录</text>
+              <text>点这里记一笔</text>
+            </view>
+            <block wx:else>
+              <view class="support-value num" style="{{item.statusStyle}}">{{item.valueText}}</view>
+              <view class="support-unit">{{item.unit}}</view>
+              <view class="support-foot">
+                <text wx:if="{{item.extraText}}" class="support-extra">{{item.extraText}}</text>
+                <text class="pill {{item.statusClass}}">{{item.statusLabel}}</text>
+              </view>
+            </block>
+          </view>
+        </view>
+        <view class="foot-note home-foot-note">点击指标可查看统计详情</view>
+
+        <view wx:if="{{!authed && !pendingRecordAfterLoad}}" class="login-card card optional-login">
           <view class="me-head">
             <view class="avatar">糖</view>
             <view><view class="n">保存自己的记录</view><view class="d">体验完成后，可自行选择登录</view></view>
@@ -73,12 +116,37 @@
       </view>
     </view>
 
-    <view class="tabbar">
-      <button class="tab on" data-tab="home" bindtap="switchPage"><text class="ti">⌂</text><text>首页</text></button>
-      <button class="tab" data-tab="history" bindtap="switchPage"><text class="ti">☰</text><text>历史</text></button>
-      <view class="fab-slot"><button class="fab" data-tab="record" bindtap="switchPage"><view class="drop"></view></button><text class="fab-label">记一笔</text></view>
-      <button class="tab" data-tab="stats" bindtap="switchPage"><text class="ti">↗</text><text>统计</text></button>
-      <button class="tab" data-tab="mine" bindtap="switchPage"><text class="ti">◯</text><text>我的</text></button>
+    <view wx:if="{{nicknamePromptOn}}" class="nickname-mask">
+      <view class="nickname-dialog">
+        <view class="nickname-title">完善头像和称呼</view>
+        <view class="nickname-copy">头像和称呼均可自愿选择，也可以暂时跳过。</view>
+        <form class="nickname-form" bindsubmit="saveNickname">
+          <button
+            class="avatar-picker"
+            open-type="chooseAvatar"
+            disabled="{{processingAvatar || savingNickname}}"
+            bindchooseavatar="onChooseAvatar"
+          >
+            <image wx:if="{{avatarDraft}}" src="{{avatarDraft}}" mode="aspectFill" />
+            <view wx:else class="avatar-picker-placeholder">选头像</view>
+            <text>{{processingAvatar ? '正在处理' : '点击选择微信头像'}}</text>
+          </button>
+          <input
+            class="nickname-input"
+            name="nickname"
+            type="nickname"
+            value="{{nicknameDraft}}"
+            maxlength="30"
+            confirm-type="done"
+            placeholder="点击选择微信昵称"
+            bindinput="onNicknameInput"
+          />
+          <view class="nickname-actions">
+            <button class="btn line nickname-skip" disabled="{{savingNickname}}" bindtap="skipNickname">暂不设置</button>
+            <button class="btn primary nickname-save" form-type="submit" loading="{{savingNickname}}" disabled="{{savingNickname || processingAvatar}}">保存资料</button>
+          </view>
+        </form>
+      </view>
     </view>
   </view>
 </view>

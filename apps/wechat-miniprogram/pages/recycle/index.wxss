@@ -1,3 +1,7 @@
+.recycle-page {
+  padding-bottom: 48rpx;
+}
+
 .login-btn {
   margin-top: 24rpx;
 }
@@ -34,7 +38,7 @@
 .record-sub {
   margin-top: 10rpx;
   color: var(--ink-3);
-  font-size: 23rpx;
+  font-size: 24rpx;
   line-height: 1.5;
 }
 
@@ -45,12 +49,31 @@
 }
 
 .restore {
-  width: 84rpx;
-  height: 54rpx;
+  width: 120rpx;
+  height: 64rpx;
   border-radius: 18rpx;
   align-self: center;
   background: var(--brand-soft);
   color: var(--brand-deep);
-  font-size: 23rpx;
+  font-size: 24rpx;
   font-weight: 800;
+}
+
+.record-ops {
+  width: 132rpx;
+  flex: 0 0 132rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12rpx;
+}
+
+.purge {
+  width: 132rpx;
+  height: 64rpx;
+  border-radius: 18rpx;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 24rpx;
+  font-weight: 750;
 }

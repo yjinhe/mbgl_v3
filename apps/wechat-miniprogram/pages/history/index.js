@@ -1,7 +1,17 @@
-const { request } = require('../../utils/api');
-const { ensureLogin, decorateRecord } = require('../../utils/page');
+const { getToken, request } = require('../../utils/api');
+const {
+  captureDataLease,
+  isDataLeaseCurrent,
+  isPageFresh,
+  markPageFresh,
+  markRecordsChanged
+} = require('../../utils/data-cache');
+const { ensureLogin, decorateRecord, fetchMe } = require('../../utils/page');
 const { demoRecords } = require('../../utils/demo');
 const { metrics } = require('../../utils/metrics');
+const { syncTabBar } = require('../../utils/tabbar');
+
+const HISTORY_CACHE_DOMAINS = ['records', 'profile'];
 
 Page({
   data: {
@@ -9,6 +19,7 @@ Page({
     loading: false,
     metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === 'glucose', className: item.key === 'glucose' ? 'on' : '' })),
     metric: 'glucose',
+    unit: 'mmol',
     records: [],
     nextCursor: null,
     hasRecords: false,
@@ -20,11 +31,13 @@ Page({
   },
 
   onShow() {
-    this.load();
+    syncTabBar(this);
+    if (!this.isDataFresh()) this.load();
   },
 
   setMetric(event) {
     const metric = event.currentTarget.dataset.metric;
+    if (!metric || metric === this.data.metric) return;
     this.setData({
       metric,
       metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === metric, className: item.key === metric ? 'on' : '' }))
@@ -32,29 +45,54 @@ Page({
   },
 
   async load(reset = true) {
-    if (this.data.loading) return;
-    if (!(await ensureLogin(this))) {
-      const records = demoRecords(this.data.metric).map((item) => decorateRecord(this.data.metric, item));
-      this.setData({ records, nextCursor: null, hasRecords: records.length > 0, authed: false, loading: false });
-      return;
-    }
+    const metric = this.data.metric;
+    const cursor = reset ? null : this.data.nextCursor;
+    const lease = captureDataLease(getToken(), HISTORY_CACHE_DOMAINS);
+    const loadingKey = `history:${metric}:${cursor || 'first'}:${lease.generation}:${lease.versions.records}:${lease.versions.profile}`;
+    if (this._loadingKey === loadingKey) return;
+    this._loadingKey = loadingKey;
+    const loadSeq = (this._loadSeq || 0) + 1;
+    this._loadSeq = loadSeq;
     try {
+      if (!(await ensureLogin(this))) {
+        if (loadSeq !== this._loadSeq || metric !== this.data.metric || !isDataLeaseCurrent(lease, getToken())) return;
+        const records = demoRecords(metric).map((item) => decorateRecord(metric, item));
+        this.setData({ records, nextCursor: null, hasRecords: records.length > 0, authed: false, loading: false });
+        this.markDataFresh(metric);
+        return;
+      }
       this.setData({ loading: true });
-      const cursor = reset ? null : this.data.nextCursor;
       const query = cursor ? `?limit=50&cursor=${encodeURIComponent(cursor)}` : '?limit=50';
-      const res = await request(`/api/app/records/${this.data.metric}${query}`);
-      const incoming = (res.items || []).map((item) => decorateRecord(this.data.metric, item));
+      const [res, me] = await Promise.all([
+        request(`/api/app/records/${metric}${query}`),
+        fetchMe()
+      ]);
+      if (loadSeq !== this._loadSeq || metric !== this.data.metric || !isDataLeaseCurrent(lease, getToken())) return;
+      const unit = me && me.unit ? me.unit : 'mmol';
+      const incoming = (res.items || []).map((item) => decorateRecord(metric, item, unit));
       const records = reset ? incoming : this.data.records.concat(incoming);
-      this.setData({ records, nextCursor: res.nextCursor || null, hasRecords: records.length > 0, authed: true });
+      this.setData({ records, unit, nextCursor: res.nextCursor || null, hasRecords: records.length > 0, authed: true });
+      this.markDataFresh(metric);
     } catch (error) {
-      wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+      if (loadSeq === this._loadSeq) {
+        wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+      }
     } finally {
-      this.setData({ loading: false });
+      if (loadSeq === this._loadSeq) this.setData({ loading: false });
+      if (this._loadingKey === loadingKey) this._loadingKey = '';
     }
   },
 
   loadMore() {
     if (this.data.nextCursor) this.load(false);
+  },
+
+  isDataFresh() {
+    return isPageFresh(this, `history:${this.data.metric}`, HISTORY_CACHE_DOMAINS, getToken());
+  },
+
+  markDataFresh(metric = this.data.metric) {
+    markPageFresh(this, `history:${metric}`, HISTORY_CACHE_DOMAINS, getToken());
   },
 
   async remove(event) {
@@ -68,7 +106,10 @@ Page({
       success: async (res) => {
         if (!res.confirm) return;
         try {
+          const lease = captureDataLease(getToken(), []);
           await request(`/api/app/records/${this.data.metric}/${id}`, { method: 'DELETE' });
+          if (!isDataLeaseCurrent(lease, getToken())) return;
+          markRecordsChanged();
           wx.showToast({ title: '已删除', icon: 'none' });
           this.load(true);
         } catch (error) {
@@ -76,18 +117,5 @@ Page({
         }
       }
     });
-  },
-
-  switchPage(event) {
-    const tab = event.currentTarget.dataset.tab;
-    const urlMap = {
-      home: '/pages/home/index',
-      history: '/pages/history/index',
-      record: '/pages/record/index',
-      stats: '/pages/stats/index',
-      mine: '/pages/mine/index'
-    };
-    if (tab === 'history') return;
-    wx.redirectTo({ url: urlMap[tab] });
   }
 });

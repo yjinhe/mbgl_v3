@@ -7,6 +7,7 @@ function atDaysAgo(days, hour, minute = 0) {
 
 const demoMe = {
   nickname: '体验用户',
+  avatarUrl: null,
   sex: 'male',
   unit: 'mmol',
   target: { fastingLow: 4.4, fastingHigh: 7, postMealHigh: 10 },

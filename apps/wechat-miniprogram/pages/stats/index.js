@@ -1,7 +1,16 @@
-const { request } = require('../../utils/api');
-const { ensureLogin } = require('../../utils/page');
+const { getToken, request } = require('../../utils/api');
+const {
+  captureDataLease,
+  isDataLeaseCurrent,
+  isPageFresh,
+  markPageFresh
+} = require('../../utils/data-cache');
+const { ensureLogin, fetchMe } = require('../../utils/page');
 const { demoStats } = require('../../utils/demo');
-const { metrics } = require('../../utils/metrics');
+const { displayGlucoseValue, glucoseUnitText, metrics } = require('../../utils/metrics');
+const { consumeStatMetric, syncTabBar } = require('../../utils/tabbar');
+
+const STATS_CACHE_DOMAINS = ['records', 'profile'];
 
 Page({
   data: {
@@ -9,6 +18,7 @@ Page({
     loading: false,
     metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === 'glucose', className: item.key === 'glucose' ? 'on' : '' })),
     metric: 'glucose',
+    unit: 'mmol',
     range: 7,
     range7Class: 'on',
     range30Class: '',
@@ -25,9 +35,13 @@ Page({
   },
 
   onShow() {
-    const selected = wx.getStorageSync('tangji_stat_metric') || this.data.metric;
-    wx.removeStorageSync('tangji_stat_metric');
-    this.setMetricValue(selected);
+    syncTabBar(this);
+    const selected = consumeStatMetric();
+    if (selected && selected !== this.data.metric) {
+      this.setMetricValue(selected);
+      return;
+    }
+    if (!this.isDataFresh()) this.load();
   },
 
   setMetric(event) {
@@ -36,6 +50,7 @@ Page({
 
   setRange(event) {
     const range = Number(event.currentTarget.dataset.range);
+    if (!range || range === this.data.range) return;
     this.setData({
       range,
       range7Class: range === 7 ? 'on' : '',
@@ -45,6 +60,11 @@ Page({
   },
 
   setMetricValue(metric) {
+    if (!metric) return;
+    if (metric === this.data.metric) {
+      if (!this.isDataFresh()) this.load();
+      return;
+    }
     this.setData({
       metric,
       metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === metric, className: item.key === metric ? 'on' : '' }))
@@ -52,22 +72,56 @@ Page({
   },
 
   async load() {
-    if (!(await ensureLogin(this))) {
-      this.setData(Object.assign({ authed: false, loading: false }, this.decorate(demoStats(this.data.metric, this.data.range))));
-      return;
-    }
+    const metric = this.data.metric;
+    const range = this.data.range;
+    const lease = captureDataLease(getToken(), STATS_CACHE_DOMAINS);
+    const loadingKey = `${this.cacheKey(metric, range)}:${lease.generation}:${lease.versions.records}:${lease.versions.profile}`;
+    if (this._loadingKey === loadingKey) return;
+    this._loadingKey = loadingKey;
+    const loadSeq = (this._loadSeq || 0) + 1;
+    this._loadSeq = loadSeq;
     try {
-      this.setData({ loading: true });
-      const data = await request(`/api/app/stats?metric=${this.data.metric}&range=${this.data.range}`);
-      this.setData(Object.assign({ authed: true }, this.decorate(data || {})));
+      if (!(await ensureLogin(this))) {
+        if (loadSeq !== this._loadSeq || !isDataLeaseCurrent(lease, getToken())) return;
+        this.setData(Object.assign({ authed: false, loading: false, unit: 'mmol' }, this.decorate(demoStats(metric, range), 'mmol')));
+        this.markDataFresh(metric, range);
+        return;
+      }
+      const [data, me] = await Promise.all([
+        request(`/api/app/stats?metric=${metric}&range=${range}`),
+        fetchMe()
+      ]);
+      if (
+        loadSeq !== this._loadSeq
+          || metric !== this.data.metric
+          || range !== this.data.range
+          || !isDataLeaseCurrent(lease, getToken())
+      ) return;
+      const unit = me && me.unit ? me.unit : 'mmol';
+      this.setData(Object.assign({ authed: true, unit }, this.decorate(data || {}, unit)));
+      this.markDataFresh(metric, range);
     } catch (error) {
-      wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+      if (loadSeq === this._loadSeq) {
+        wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+      }
     } finally {
-      this.setData({ loading: false });
+      if (this._loadingKey === loadingKey) this._loadingKey = '';
     }
   },
 
-  decorate(data) {
+  cacheKey(metric = this.data.metric, range = this.data.range) {
+    return `stats:${metric}:${range}`;
+  },
+
+  isDataFresh() {
+    return isPageFresh(this, this.cacheKey(), STATS_CACHE_DOMAINS, getToken());
+  },
+
+  markDataFresh(metric = this.data.metric, range = this.data.range) {
+    markPageFresh(this, this.cacheKey(metric, range), STATS_CACHE_DOMAINS, getToken());
+  },
+
+  decorate(data, unit = this.data.unit) {
     const metric = this.data.metric;
     const points = (data.series && (data.series.points || data.series)) || [];
     const bars = Array.isArray(points)
@@ -79,12 +133,13 @@ Page({
       : [];
 
     if (metric === 'glucose') {
+      const unitText = glucoseUnitText(unit);
       return {
         summary: [
           { label: '记录数', value: data.n || 0, unit: '次' },
-          { label: '平均血糖', value: this.safeFixed(data.avg), unit: 'mmol/L' },
-          { label: '最高', value: this.safeFixed(data.max), unit: '' },
-          { label: '最低', value: this.safeFixed(data.min), unit: '' }
+          { label: '平均血糖', value: displayGlucoseValue(data.avg, unit), unit: unitText },
+          { label: '最高', value: displayGlucoseValue(data.max, unit), unit: unitText },
+          { label: '最低', value: displayGlucoseValue(data.min, unit), unit: unitText }
         ],
         bars,
         hasBars: bars.length > 0
@@ -107,9 +162,9 @@ Page({
       return {
         summary: [
           { label: '化验次数', value: data.n || 0, unit: '次' },
-          { label: 'TC', value: latest.tc || '—', unit: '' },
-          { label: 'TG', value: latest.tg || '—', unit: '' },
-          { label: 'LDL-C', value: latest.ldl || '—', unit: '' }
+          { label: 'TC', value: latest.tc || '—', unit: 'mmol/L' },
+          { label: 'TG', value: latest.tg || '—', unit: 'mmol/L' },
+          { label: 'LDL-C', value: latest.ldl || '—', unit: 'mmol/L' }
         ],
         bars,
         hasBars: bars.length > 0
@@ -119,7 +174,7 @@ Page({
       summary: [
         { label: '记录数', value: data.n || 0, unit: '次' },
         { label: '最近一次', value: data.latest ? data.latest.value : '—', unit: 'μmol/L' },
-        { label: '平均', value: Math.round(data.avg || 0), unit: '' },
+        { label: '平均', value: Math.round(data.avg || 0), unit: 'μmol/L' },
         { label: '达标率', value: Math.round((data.okRate || 0) * 100), unit: '%' }
       ],
       bars,
@@ -129,18 +184,5 @@ Page({
 
   safeFixed(value) {
     return value == null ? '—' : Number(value).toFixed(1);
-  },
-
-  switchPage(event) {
-    const tab = event.currentTarget.dataset.tab;
-    const urlMap = {
-      home: '/pages/home/index',
-      history: '/pages/history/index',
-      record: '/pages/record/index',
-      stats: '/pages/stats/index',
-      mine: '/pages/mine/index'
-    };
-    if (tab === 'stats') return;
-    wx.redirectTo({ url: urlMap[tab] });
   }
 });

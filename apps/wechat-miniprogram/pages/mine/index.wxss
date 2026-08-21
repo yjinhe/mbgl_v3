@@ -1,33 +1,26 @@
-.me-head {
-  display: flex;
-  align-items: center;
-  gap: 26rpx;
-  padding: 24rpx 8rpx 32rpx;
+.avatar-shell {
+  position: relative;
+  overflow: hidden;
 }
 
-.avatar {
+.avatar-shell image {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.avatar-trigger {
+  position: absolute;
+  inset: 0;
   width: 108rpx;
   height: 108rpx;
+  min-width: 108rpx;
+  max-width: 108rpx;
+  min-height: 108rpx;
+  max-height: 108rpx;
+  padding: 0;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  color: #fff;
-  font-size: 50rpx;
-  background: linear-gradient(140deg, #15B189, #0A5A4C);
-  box-shadow: 0 12rpx 28rpx rgba(14, 126, 107, .3);
-}
-
-.me-head .n {
-  font-size: 34rpx;
-  font-weight: 750;
-}
-
-.me-head .d {
-  margin-top: 6rpx;
-  color: var(--ink-3);
-  font-size: 23rpx;
+  opacity: 0;
 }
 
 .cell-card {
@@ -64,7 +57,7 @@
 .cell .cs {
   margin-top: 4rpx;
   color: var(--ink-3);
-  font-size: 22rpx;
+  font-size: 24rpx;
   line-height: 1.5;
 }
 
@@ -111,7 +104,7 @@
 .bound-cell .bs {
   margin-top: 6rpx;
   color: var(--ink-3);
-  font-size: 22rpx;
+  font-size: 24rpx;
 }
 
 .danger-text {
@@ -124,5 +117,5 @@
 }
 
 .guest-login {
-  margin-top: 28rpx;
+  margin-top: 20rpx;
 }

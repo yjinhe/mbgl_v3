@@ -12,28 +12,29 @@
 
     <view class="mask {{maskOn}}" bindtap="closeSheet"></view>
     <view class="sheet {{sheetOn}}">
-      <view class="sheet-h"><text class="t">记一笔</text><button class="x" bindtap="closeSheet">×</button></view>
+      <view class="sheet-h"><text class="t">记一笔</text><button class="x" aria-label="关闭录入" bindtap="closeSheet">×</button></view>
       <view class="sheet-body">
         <view wx:if="{{!authed}}" class="demo-banner compact-demo">
           <view class="demo-title">功能演示</view>
-          <view class="demo-copy">可完整操作录入面板。演示内容不会上传，保存时可自行选择登录。</view>
+          <view class="demo-copy">可先完整体验，演示内容不会上传；保存时再选择是否登录。</view>
         </view>
-        <view class="msg">
-          <button wx:for="{{metrics}}" wx:key="key" class="{{item.className}}" data-metric="{{item.key}}" bindtap="setMetric">{{item.name}}</button>
+        <view class="msg" aria-label="选择记录类型">
+          <button wx:for="{{metrics}}" wx:key="key" class="{{item.className}}" data-metric="{{item.key}}" aria-label="记录{{item.name}}" bindtap="setMetric">{{item.name}}</button>
         </view>
         <view class="time-row">
-          <picker mode="date" value="{{dateValue}}" bindchange="onInput" data-key="dateValue"><text>{{dateValue}}</text></picker>
-          <picker mode="time" value="{{timeValue}}" bindchange="onInput" data-key="timeValue"><text>{{timeValue}}</text></picker>
+          <picker class="time-picker" mode="date" value="{{dateValue}}" end="{{dateMax}}" aria-label="测量日期" bindchange="onInput" data-key="dateValue"><view class="time-cell"><text class="time-label">日期</text><text class="time-value">{{dateValue}}</text><text class="time-arrow">›</text></view></picker>
+          <view class="time-divider"></view>
+          <picker class="time-picker time-picker-short" mode="time" value="{{timeValue}}" aria-label="测量时间" bindchange="onInput" data-key="timeValue"><view class="time-cell"><text class="time-label">时间</text><text class="time-value">{{timeValue}}</text><text class="time-arrow">›</text></view></picker>
         </view>
 
         <block wx:if="{{isBp}}">
           <view class="bp-fields">
-            <view class="bpf {{sbpAct}}" data-field="sbp" bindtap="selectBpField"><view class="fl">收缩压</view><view class="fv num">{{sbp}}<text wx:if="{{sbpCursor}}" class="cursor"></text></view><view class="fu">mmHg</view></view>
-            <view class="bpf {{dbpAct}}" data-field="dbp" bindtap="selectBpField"><view class="fl">舒张压</view><view class="fv num">{{dbp}}<text wx:if="{{dbpCursor}}" class="cursor"></text></view><view class="fu">mmHg</view></view>
-            <view class="bpf {{pulseAct}}" data-field="pulse" bindtap="selectBpField"><view class="fl">脉搏 · 选填</view><view class="fv num">{{pulse}}<text wx:if="{{pulseCursor}}" class="cursor"></text></view><view class="fu">次/分</view></view>
+            <button class="bpf {{sbpAct}}" data-field="sbp" aria-label="收缩压 {{sbp || '未填写'}}" bindtap="selectBpField"><view class="fl">收缩压</view><view class="fv num">{{sbp}}<text wx:if="{{sbpCursor}}" class="cursor"></text></view><view class="fu">mmHg</view></button>
+            <button class="bpf {{dbpAct}}" data-field="dbp" aria-label="舒张压 {{dbp || '未填写'}}" bindtap="selectBpField"><view class="fl">舒张压</view><view class="fv num">{{dbp}}<text wx:if="{{dbpCursor}}" class="cursor"></text></view><view class="fu">mmHg</view></button>
+            <button class="bpf {{pulseAct}}" data-field="pulse" aria-label="脉搏 {{pulse || '未填写'}}，选填" bindtap="selectBpField"><view class="fl">脉搏 · 选填</view><view class="fv num">{{pulse}}<text wx:if="{{pulseCursor}}" class="cursor"></text></view><view class="fu">次/分</view></button>
           </view>
           <view class="live-status" style="{{live.style}}">{{live.text}}</view>
-          <view class="f-label">测量时段 <text class="hint">已按当前时间推荐</text></view>
+          <view class="f-label">测量时段 <text class="hint">{{periodHintText}}</text></view>
           <view class="pgrid"><button wx:for="{{bpPeriods}}" wx:key="key" class="chip {{item.className}}" data-period="{{item.key}}" bindtap="setPeriod">{{item.name}}</button></view>
           <view class="f-label">情景标签（选填）</view>
           <view class="tagrow"><button wx:for="{{bpTags}}" wx:key="name" class="chip {{item.className}}" data-tag="{{item.name}}" bindtap="toggleTag">{{item.name}}</button></view>
@@ -43,11 +44,11 @@
           <view class="lp-rows">
             <view wx:for="{{lipidItems}}" wx:key="key" class="lp-row">
               <view class="ln">{{item.name}}<text class="sub">{{item.abbr}} · 参考 {{item.ref}} mmol/L</text></view>
-              <input type="digit" value="{{item.value}}" data-key="{{item.key}}" bindinput="onLipidInput" />
-              <view class="dot" style="{{item.dotStyle}}"></view>
+              <input type="digit" value="{{item.value}}" placeholder="填写数值" aria-label="{{item.name}}数值" data-key="{{item.key}}" bindinput="onLipidInput" />
+              <view class="lp-status" style="{{item.statusStyle}}">{{item.statusText}}</view>
             </view>
           </view>
-          <view class="fast-row"><text>空腹采血</text><button class="switch {{lipidFastingClass}}" bindtap="toggleLipidFasting"></button></view>
+          <view class="fast-row"><text>空腹采血</text><button class="switch {{lipidFastingClass}}" aria-label="空腹采血{{lipid.fasting ? '是' : '否'}}" bindtap="toggleLipidFasting"><text>{{lipid.fasting ? '是' : '否'}}</text><view class="switch-knob"></view></button></view>
           <view class="live-status" style="{{live.style}}">{{live.text}}</view>
         </block>
 
@@ -55,20 +56,21 @@
           <view class="bignum"><text class="bv num" style="{{live.style}}">{{value}}</text><text class="cursor"></text><text class="bu">{{unitText}}</text></view>
           <view class="live-status" style="{{live.style}}">{{live.text}}</view>
           <block wx:if="{{isGlucose}}">
-            <view class="f-label">测量时段 <text class="hint">已按当前时间推荐</text></view>
+            <view class="f-label">测量时段 <text class="hint">{{periodHintText}}</text></view>
             <view class="pgrid"><button wx:for="{{glucosePeriods}}" wx:key="key" class="chip {{item.className}}" data-period="{{item.key}}" bindtap="setPeriod">{{item.name}}</button></view>
             <view class="f-label">情景标签（选填）</view>
             <view class="tagrow"><button wx:for="{{glucoseTags}}" wx:key="name" class="chip {{item.className}}" data-tag="{{item.name}}" bindtap="toggleTag">{{item.name}}</button></view>
           </block>
           <block wx:if="{{isUric}}">
-            <view class="fast-row"><text>空腹采血</text><button class="switch {{fastingClass}}" bindtap="toggleFasting"></button></view>
+            <view class="fast-row"><text>空腹采血</text><button class="switch {{fastingClass}}" aria-label="空腹采血{{fasting ? '是' : '否'}}" bindtap="toggleFasting"><text>{{fasting ? '是' : '否'}}</text><view class="switch-knob"></view></button></view>
           </block>
         </block>
 
         <view class="f-label">备注（选填）</view>
-        <input class="note-in" maxlength="50" value="{{note}}" data-key="note" bindinput="onInput" />
+        <input class="note-in" maxlength="50" value="{{note}}" placeholder="例如饮食、运动或身体感受" aria-label="备注，选填" data-key="note" bindinput="onInput" />
       </view>
 
+      <view wx:if="{{!isLipid}}" class="scroll-affordance">↑ 录入区可上滑，填写时段、标签和备注</view>
       <view wx:if="{{!isLipid}}" class="keypad">
         <button class="key" data-key="1" bindtap="pressKey">1</button>
         <button class="key" data-key="2" bindtap="pressKey">2</button>
@@ -79,21 +81,14 @@
         <button class="key" data-key="7" bindtap="pressKey">7</button>
         <button class="key" data-key="8" bindtap="pressKey">8</button>
         <button class="key" data-key="9" bindtap="pressKey">9</button>
-        <button class="key fn" data-key="." bindtap="pressKey">{{dotKeyText}}</button>
+        <button class="key fn {{decimalKeyDisabled ? 'disabled' : ''}}" disabled="{{decimalKeyDisabled}}" data-key="." bindtap="pressKey">{{dotKeyText}}</button>
         <button class="key" data-key="0" bindtap="pressKey">0</button>
-        <button class="key fn" data-key="del" bindtap="pressKey">⌫</button>
+        <button class="key fn" data-key="del" bindtap="pressKey">删除</button>
       </view>
       <view class="record-actions"><button class="btn primary record-save" loading="{{saving}}" disabled="{{saving}}" bindtap="save">保存记录</button></view>
     </view>
 
     <view class="toast {{toastOn}}">{{toast}}</view>
 
-    <view class="tabbar">
-      <button class="tab" data-tab="home" bindtap="switchPage"><text class="ti">⌂</text><text>首页</text></button>
-      <button class="tab" data-tab="history" bindtap="switchPage"><text class="ti">☰</text><text>历史</text></button>
-      <view class="fab-slot"><button class="fab" data-tab="record" bindtap="switchPage"><view class="drop"></view></button><text class="fab-label">记一笔</text></view>
-      <button class="tab" data-tab="stats" bindtap="switchPage"><text class="ti">↗</text><text>统计</text></button>
-      <button class="tab" data-tab="mine" bindtap="switchPage"><text class="ti">◯</text><text>我的</text></button>
-    </view>
   </view>
 </view>

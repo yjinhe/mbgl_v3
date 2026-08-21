@@ -13,6 +13,7 @@
 
         <view class="legal-heading">一、我们处理的信息</view>
         <view class="legal-paragraph">为了完成微信登录，我们会处理微信提供的账号标识，用于识别您的糖迹账号，不获取您的微信密码。</view>
+        <view class="legal-paragraph">当您主动选择头像或填写称呼时，我们会处理您确认的头像和昵称，仅用于个人资料展示。头像和昵称均为可选信息，不影响记录、查看和统计功能。</view>
         <view class="legal-paragraph">当您主动使用记录功能时，我们会处理您填写的性别、血糖、血压、血脂、尿酸、测量时间、标签和备注。这些健康数据属于敏感个人信息，仅在您主动填写并明确同意后处理。</view>
         <view class="legal-paragraph">本小程序不申请手机号、通讯录、位置、相册、摄像头或麦克风权限。</view>
 

@@ -1,11 +1,24 @@
 const { getToken, loginWithWechat, request, clearLogin } = require('./api');
+const { getMeCached } = require('./data-cache');
 const { ensurePlatformPrivacyAuthorization, hasConsent, saveConsent } = require('./privacy');
 const { fmtMD, fmtTime, dayLabel } = require('./format');
 const { metricByKey, neutralStatusLabel, periodNames, readRecord, statusClass, statusStyle } = require('./metrics');
 
+const PENDING_RECORD_KEY = 'tangji_pending_record';
+
+function shouldClearLogin(error, requestToken) {
+  return Boolean(
+    requestToken
+      && getToken() === requestToken
+      && (error.statusCode === 401 || error.statusCode === 403)
+  );
+}
+
 async function ensureLogin(page) {
   if (getToken() && hasConsent()) return true;
-  page.setData({ authed: false, loading: false });
+  if (page.data.authed || page.data.loading) {
+    page.setData({ authed: false, loading: false });
+  }
   return false;
 }
 
@@ -40,38 +53,80 @@ function logoutToLogin(page) {
   page.setData({ authed: false, me: null, overview: null, records: {} });
 }
 
-function promptLoginForAction() {
+function getPendingRecord() {
+  return wx.getStorageSync(PENDING_RECORD_KEY) || null;
+}
+
+function clearPendingRecord() {
+  wx.removeStorageSync(PENDING_RECORD_KEY);
+}
+
+function promptLoginForAction(pendingRecord) {
   wx.showModal({
     title: '登录后保存',
-    content: '当前为功能演示，演示内容不会上传。登录后可将记录保存到个人账号。',
+    content: '当前为功能演示。去登录后，本次填写内容会自动保存到个人账号。',
     cancelText: '继续体验',
-    confirmText: '去登录',
+    confirmText: '去登录并保存',
     confirmColor: '#0E7E6B',
     success: (result) => {
-      if (result.confirm) wx.reLaunch({ url: '/pages/home/index' });
+      if (!result.confirm) return;
+      wx.setStorageSync(PENDING_RECORD_KEY, pendingRecord);
+      wx.reLaunch({ url: '/pages/home/index?pendingRecord=1' });
     }
   });
 }
 
 async function loadAppData(page) {
   if (!(await ensureLogin(page))) return;
+  const requestToken = getToken();
   try {
-    page.setData({ loading: true });
     const [me, overview] = await Promise.all([
-      request('/api/app/me'),
+      fetchMe(),
       request('/api/app/overview')
     ]);
-    page.setData({ authed: true, me, overview });
     return { me, overview };
   } catch (error) {
-    logoutToLogin(page);
-    wx.showToast({ title: error.message || '请重新登录', icon: 'none' });
-  } finally {
-    page.setData({ loading: false });
+    const authExpired = shouldClearLogin(error, requestToken);
+    if (authExpired) {
+      logoutToLogin(page);
+      wx.reLaunch({ url: '/pages/home/index' });
+    }
+    wx.showToast({
+      title: authExpired ? '请重新登录' : (error.message || '加载失败，请稍后重试'),
+      icon: 'none'
+    });
+    return false;
   }
 }
 
-function decorateRecord(metric, record) {
+function fetchMe(options = {}) {
+  const token = getToken();
+  if (!token) return Promise.resolve(null);
+  return getMeCached(token, () => request('/api/app/me'), options);
+}
+
+async function loadMe(page, options = {}) {
+  if (!(await ensureLogin(page))) return;
+  const requestToken = getToken();
+  try {
+    const me = await fetchMe(options);
+    if (options.apply !== false) page.setData({ authed: true, me });
+    return me;
+  } catch (error) {
+    const authExpired = shouldClearLogin(error, requestToken);
+    if (authExpired) {
+      logoutToLogin(page);
+      wx.reLaunch({ url: '/pages/home/index' });
+    }
+    wx.showToast({
+      title: authExpired ? '请重新登录' : (error.message || '加载失败，请稍后重试'),
+      icon: 'none'
+    });
+    return false;
+  }
+}
+
+function decorateRecord(metric, record, unit = 'mmol') {
   const meta = metricByKey(metric);
   const status = Object.assign({}, record.status || {}, { label: neutralStatusLabel(record.status) });
   return Object.assign({}, record, {
@@ -81,7 +136,8 @@ function decorateRecord(metric, record) {
     dayText: dayLabel(record.measuredAt),
     timeText: fmtTime(record.measuredAt),
     dateText: fmtMD(record.measuredAt),
-    readText: readRecord(metric, record),
+    readText: readRecord(metric, record, unit),
+    hasNote: Boolean(record.note),
     noteText: record.note || '无备注',
     status,
     statusClass: statusClass(status),
@@ -91,10 +147,14 @@ function decorateRecord(metric, record) {
 }
 
 module.exports = {
+  clearPendingRecord,
   decorateRecord,
   doLogin,
   ensureLogin,
+  fetchMe,
+  getPendingRecord,
   loadAppData,
+  loadMe,
   logoutToLogin,
   promptLoginForAction
 };
