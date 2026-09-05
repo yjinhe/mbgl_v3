@@ -9,7 +9,7 @@ const {
 const { ensureLogin, decorateRecord, fetchMe } = require('../../utils/page');
 const { demoRecords } = require('../../utils/demo');
 const { metrics } = require('../../utils/metrics');
-const { syncTabBar } = require('../../utils/tabbar');
+const { setRecordEdit, setRecordReturnPath, syncTabBar } = require('../../utils/tabbar');
 
 const HISTORY_CACHE_DOMAINS = ['records', 'profile'];
 
@@ -17,6 +17,7 @@ Page({
   data: {
     authed: false,
     loading: false,
+    error: '',
     metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === 'glucose', className: item.key === 'glucose' ? 'on' : '' })),
     metric: 'glucose',
     unit: 'mmol',
@@ -40,6 +41,11 @@ Page({
     if (!metric || metric === this.data.metric) return;
     this.setData({
       metric,
+      records: [],
+      nextCursor: null,
+      hasRecords: false,
+      error: '',
+      loading: true,
       metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === metric, className: item.key === metric ? 'on' : '' }))
     }, () => this.load(true));
   },
@@ -53,11 +59,12 @@ Page({
     this._loadingKey = loadingKey;
     const loadSeq = (this._loadSeq || 0) + 1;
     this._loadSeq = loadSeq;
+    this.setData(Object.assign({ loading: true, error: '' }, reset ? { records: [], hasRecords: false, nextCursor: null } : {}));
     try {
       if (!(await ensureLogin(this))) {
         if (loadSeq !== this._loadSeq || metric !== this.data.metric || !isDataLeaseCurrent(lease, getToken())) return;
         const records = demoRecords(metric).map((item) => decorateRecord(metric, item));
-        this.setData({ records, nextCursor: null, hasRecords: records.length > 0, authed: false, loading: false });
+        this.setData({ records, nextCursor: null, hasRecords: records.length > 0, authed: false, loading: false, error: '' });
         this.markDataFresh(metric);
         return;
       }
@@ -71,11 +78,11 @@ Page({
       const unit = me && me.unit ? me.unit : 'mmol';
       const incoming = (res.items || []).map((item) => decorateRecord(metric, item, unit));
       const records = reset ? incoming : this.data.records.concat(incoming);
-      this.setData({ records, unit, nextCursor: res.nextCursor || null, hasRecords: records.length > 0, authed: true });
+      this.setData({ records, unit, nextCursor: res.nextCursor || null, hasRecords: records.length > 0, authed: true, error: '' });
       this.markDataFresh(metric);
     } catch (error) {
-      if (loadSeq === this._loadSeq) {
-        wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+      if (loadSeq === this._loadSeq && metric === this.data.metric && isDataLeaseCurrent(lease, getToken())) {
+        this.setData({ error: error.message || '加载失败，请重试' });
       }
     } finally {
       if (loadSeq === this._loadSeq) this.setData({ loading: false });
@@ -84,11 +91,30 @@ Page({
   },
 
   loadMore() {
-    if (this.data.nextCursor) this.load(false);
+    if (!this.data.loading && this.data.nextCursor) this.load(false);
+  },
+
+  retry() {
+    this.load(!this.data.hasRecords);
+  },
+
+  edit(event) {
+    if (!this.data.authed || this.data.loading) return;
+    const record = this.data.records.find((item) => item.id === event.currentTarget.dataset.id);
+    if (!record) return;
+    setRecordEdit(this.data.metric, record, getToken());
+    setRecordReturnPath('/pages/history/index');
+    wx.switchTab({
+      url: '/pages/record/index',
+      fail: () => {
+        setRecordEdit('', null, '');
+        wx.showToast({ title: '暂时无法打开，请重试', icon: 'none' });
+      }
+    });
   },
 
   isDataFresh() {
-    return isPageFresh(this, `history:${this.data.metric}`, HISTORY_CACHE_DOMAINS, getToken());
+    return !this.data.error && isPageFresh(this, `history:${this.data.metric}`, HISTORY_CACHE_DOMAINS, getToken());
   },
 
   markDataFresh(metric = this.data.metric) {
@@ -98,6 +124,8 @@ Page({
   async remove(event) {
     if (!this.data.authed) return;
     const id = event.currentTarget.dataset.id;
+    const metric = this.data.metric;
+    const lease = captureDataLease(getToken(), []);
     wx.showModal({
       title: '删除记录？',
       content: '删除后 7 天内可在回收站找回。',
@@ -105,9 +133,9 @@ Page({
       confirmColor: '#D6453D',
       success: async (res) => {
         if (!res.confirm) return;
+        if (!isDataLeaseCurrent(lease, getToken())) return;
         try {
-          const lease = captureDataLease(getToken(), []);
-          await request(`/api/app/records/${this.data.metric}/${id}`, { method: 'DELETE' });
+          await request(`/api/app/records/${metric}/${encodeURIComponent(id)}`, { method: 'DELETE' });
           if (!isDataLeaseCurrent(lease, getToken())) return;
           markRecordsChanged();
           wx.showToast({ title: '已删除', icon: 'none' });

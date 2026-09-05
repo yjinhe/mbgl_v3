@@ -9,6 +9,7 @@ const TAB_ITEMS = [
 const navigationIntent = {
   statMetric: '',
   recordMetric: '',
+  recordEdit: null,
   recordReturnPath: ''
 };
 
@@ -24,6 +25,18 @@ function consumeStatMetric(fallback = '') {
 
 function setRecordMetric(metric) {
   navigationIntent.recordMetric = String(metric || '');
+}
+
+function setRecordEdit(metric, record, token) {
+  navigationIntent.recordEdit = record && record.id && token
+    ? { metric, record: JSON.parse(JSON.stringify(record)), token }
+    : null;
+}
+
+function consumeRecordEdit(token) {
+  const intent = navigationIntent.recordEdit;
+  navigationIntent.recordEdit = null;
+  return intent && intent.token === token ? intent : null;
 }
 
 function consumeRecordMetric(fallback = '') {
@@ -74,11 +87,13 @@ module.exports = {
   TAB_ITEMS,
   clearRecordReturnPath,
   consumeRecordMetric,
+  consumeRecordEdit,
   consumeRecordReturnPath,
   consumeStatMetric,
   currentRoute,
   selectedTabIndex,
   setRecordMetric,
+  setRecordEdit,
   setRecordReturnPath,
   setStatMetric,
   syncTabBar

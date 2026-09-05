@@ -1,5 +1,6 @@
 const { clearPendingRecord, doLogin, getPendingRecord, loadAppData } = require('../../utils/page');
 const { getToken, request } = require('../../utils/api');
+const { newRecordRequestId, removeRecordDraft } = require('../../utils/record-draft');
 const { prepareAvatar } = require('../../utils/avatar');
 const {
   captureDataLease,
@@ -21,13 +22,12 @@ const {
 const {
   fmtMD,
   fmtTime,
-  dayLabel,
   greetingAt,
   localDateLine,
   toDateInput,
   toTimeInput
 } = require('../../utils/format');
-const { metrics, neutralStatusLabel, statusClass, statusStyle, periodNames } = require('../../utils/metrics');
+const { metrics, glucoseStatus, displayGlucoseValue, neutralStatusLabel, statusClass, statusStyle, periodNames } = require('../../utils/metrics');
 
 const HOME_ICON_ROOT = '/assets/home-icons';
 const HOME_CACHE_DOMAINS = ['records', 'profile'];
@@ -132,15 +132,28 @@ Page({
       return false;
     }
     const requestToken = getToken();
+    if (!requestToken || !this.data.authed) return false;
+    const ownerId = this.data.me && this.data.me.id;
+    if (pending.ownerId && pending.ownerId !== ownerId) {
+      clearPendingRecord();
+      this.clearPendingRecordState();
+      return false;
+    }
+    if (!pending.clientRequestId) pending.clientRequestId = newRecordRequestId();
+    pending.ownerId = ownerId;
     const lease = captureDataLease(requestToken, []);
     try {
+      wx.setStorageSync('tangji_pending_record', pending);
       this.setData({ savingPendingRecord: true, pendingRecordError: '' });
-      const result = await request(`/api/app/records/${pending.metric}`, { method: 'POST', data: pending.data });
-      clearPendingRecord();
+      const result = await request(`/api/app/records/${pending.metric}`, {
+        method: 'POST', data: pending.data, header: { 'Idempotency-Key': pending.clientRequestId }
+      });
       if (!isDataLeaseCurrent(lease, getToken())) {
         this.clearPendingRecordState();
         return false;
       }
+      clearPendingRecord();
+      removeRecordDraft(ownerId, pending.metric);
       markRecordsChanged();
       this.clearPendingRecordState();
       const refreshed = await this.refresh();
@@ -148,6 +161,7 @@ Page({
       this.showPendingSaveSuccess(pending, result || {});
       return true;
     } catch (error) {
+      if (!isDataLeaseCurrent(lease, getToken())) return false;
       const message = error.message || '记录保存失败，请重试';
       const presentation = this.pendingRecordPresentation(pending);
       this.setData({
@@ -267,7 +281,7 @@ Page({
       ? page.inferPeriod(metric, safeMeasuredAt)
       : data.period;
     const restoredPeriod = data.period || recommendedPeriod;
-    const periodWasManuallySelected = Boolean(restoredPeriod && recommendedPeriod && restoredPeriod !== recommendedPeriod);
+    const periodWasManuallySelected = Boolean(restoredPeriod);
     patch.period = restoredPeriod;
     patch.recommendedPeriod = recommendedPeriod;
     patch.periodIsRecommended = restoredPeriod === recommendedPeriod;
@@ -337,6 +351,8 @@ Page({
       Object.assign(patch, page.decimalKeyPatch(metric, patch.unitText || page.data.unitText));
     }
 
+    page._clientRequestId = pending.clientRequestId || '';
+    page._requestFingerprint = JSON.stringify({ metric, data });
     page.setData(patch, () => {
       if (metric === 'lipid' && typeof page.updateLipidItems === 'function') page.updateLipidItems();
       if (typeof page.updateLive === 'function') page.updateLive();
@@ -533,7 +549,10 @@ Page({
         metricIconSrc: metricIcon(metric.key)
       };
     }
-    const status = latest.status || { key: 'ok', label: '达标' };
+    const target = Object.assign({ fastingLow: 4.4, fastingHigh: 7, postMealHigh: 10 }, me.target || {});
+    const status = metric.key === 'glucose'
+      ? glucoseStatus(latest.valueMmol, latest.period, target)
+      : (latest.status || { key: 'ok', label: '达标' });
     const card = {
       key: metric.key,
       name: metric.name,
@@ -550,17 +569,25 @@ Page({
       overviewStatusLabel: status.key === 'ok' ? '达标' : neutralStatusLabel(status),
       overviewIconSrc: overviewIcon(metric.key, status.key),
       metricIconSrc: metricIcon(metric.key),
-      dateText: dayLabel(latest.measuredAt),
+      dateText: toDateInput(new Date(latest.measuredAt)),
+      overviewDateText: fmtMD(latest.measuredAt),
       timeText: fmtTime(latest.measuredAt),
       periodText: periodNames[latest.period] || latest.periodName || ''
     };
     if (metric.key === 'glucose') {
-      card.valueText = latest.displayValue || latest.valueMmol;
+      card.valueText = displayGlucoseValue(latest.valueMmol, me.unit);
       card.unitText = me.unit === 'mgdl' ? 'mg/dL' : 'mmol/L';
-      card.targetText = `目标 ${me.target ? me.target.fastingLow : 4.4}-${me.target ? me.target.postMealHigh : 10}`;
-      card.bandLeft = '10.5%';
-      card.bandWidth = '33.9%';
-      card.dotLeft = `${Math.max(0, Math.min(100, ((Number(latest.valueMmol) - 2) / 18) * 100))}%`;
+      const fastingPeriods = ['fasting', 'before_lunch', 'before_dinner', 'bedtime', 'dawn'];
+      const low = Number(target.fastingLow);
+      const high = Number(fastingPeriods.includes(latest.period) ? target.fastingHigh : target.postMealHigh);
+      const gaugeMax = Math.max(20, Math.ceil(Number(latest.valueMmol) / 5) * 5, Math.ceil(high + 2));
+      card.targetText = `${card.periodText || '当前时段'}参考 ${displayGlucoseValue(low, me.unit)}–${displayGlucoseValue(high, me.unit)} ${card.unitText}`;
+      card.bandLeft = `${low / gaugeMax * 100}%`;
+      card.bandWidth = `${(high - low) / gaugeMax * 100}%`;
+      card.dotLeft = `${Math.max(0, Math.min(100, Number(latest.valueMmol) / gaugeMax * 100))}%`;
+      card.gaugeMinText = displayGlucoseValue(0, me.unit);
+      card.gaugeMidText = displayGlucoseValue(gaugeMax / 2, me.unit);
+      card.gaugeMaxText = displayGlucoseValue(gaugeMax, me.unit);
     } else if (metric.key === 'bp') {
       card.valueText = `${latest.sbp}/${latest.dbp}`;
       card.extraText = latest.pulse ? `脉搏 ${latest.pulse}` : '';

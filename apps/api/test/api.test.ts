@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 import { buildApp } from '../src/app.js';
 import { hashPassword } from '../src/services/password.js';
@@ -40,10 +41,11 @@ beforeAll(async () => {
   process.env.DATABASE_URL = `file:${path.join(dir, 'test.db')}`;
   process.env.JWT_SECRET = 'test-secret';
   process.env.WECHAT_MOCK = 'true';
-  execFileSync(path.resolve('apps/api/node_modules/.bin/prisma'), [
+  const apiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  execFileSync(path.join(apiRoot, 'node_modules/.bin/prisma'), [
     'generate',
     '--schema',
-    path.resolve('apps/api/prisma/schema.prisma')
+    path.join(apiRoot, 'prisma/schema.prisma')
   ], { stdio: 'pipe' });
   prisma = new PrismaClient();
   await createSqliteSchema(prisma);
@@ -254,12 +256,14 @@ describe('app records', () => {
   });
 
   test('creates four metric records with correct safety alerts', async () => {
-    await request(app.server)
+    const glucose = await request(app.server)
       .post('/api/app/records/glucose')
       .set('Authorization', `Bearer ${appToken}`)
-      .send({ value: 3.5, unit: 'mmol', period: 'fasting', measuredAt: new Date().toISOString() })
-      .expect(201)
-      .expect((res) => expect(res.body.safetyAlert).toBe('low'));
+      .send({ value: 3.5, unit: 'mmol', period: 'post_meal_1h', measuredAt: new Date().toISOString() })
+      .expect(201);
+    expect(glucose.body.safetyAlert).toBe('low');
+    expect(glucose.body.record.period).toBe('post_meal_1h');
+    expect(glucose.body.record.periodName).toBe('餐后1小时');
 
     const bp = await request(app.server)
       .post('/api/app/records/bp')

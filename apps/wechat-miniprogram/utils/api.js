@@ -25,19 +25,30 @@ function setToken(token) {
   tokenLoaded = true;
   if (nextToken !== previousToken) {
     require('./data-cache').resetSessionData();
+    require('./record-draft').clearRecordDrafts();
+    if (previousToken) wx.removeStorageSync('tangji_pending_record');
   }
 }
 
 function request(path, options = {}) {
   const token = getToken();
+  const method = String(options.method || 'GET').toUpperCase();
+  const hasData = Object.prototype.hasOwnProperty.call(options, 'data')
+    && options.data !== undefined;
+  const data = !hasData && method !== 'GET' && method !== 'HEAD'
+    ? {}
+    : options.data;
   const header = Object.assign({ 'content-type': 'application/json' }, options.header || {});
   if (token) header.Authorization = `Bearer ${token}`;
 
   return new Promise((resolve, reject) => {
     wx.request({
       url: `${apiBase}${path}`,
-      method: options.method || 'GET',
-      data: options.data,
+      method,
+      // wx.request sends application/json by default. Fastify rejects an empty
+      // JSON body on mutation requests before the route handler runs, so send
+      // an explicit empty object for DELETE/POST requests without a payload.
+      data,
       header,
       success(res) {
         if (res.statusCode >= 200 && res.statusCode < 300) {

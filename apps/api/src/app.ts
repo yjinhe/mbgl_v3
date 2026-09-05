@@ -10,6 +10,7 @@ import { authPlugin } from './plugins/auth.js';
 import { appRoutes } from './routes/app.js';
 import { pharmacyRoutes } from './routes/pharmacy.js';
 import { adminRoutes } from './routes/admin.js';
+import { proxyTrust } from './services/proxy-trust.js';
 
 export async function buildApp(options: { prisma?: PrismaClient } = {}) {
   const ownsPrisma = !options.prisma;
@@ -31,7 +32,7 @@ export async function buildApp(options: { prisma?: PrismaClient } = {}) {
         censor: '[REDACTED]'
       }
     },
-    trustProxy: config.trustProxyHops === 0 ? false : config.trustProxyHops
+    trustProxy: proxyTrust(config.trustProxyHops)
   });
   app.decorate('prisma', prisma);
   await app.register(helmet);
@@ -41,6 +42,7 @@ export async function buildApp(options: { prisma?: PrismaClient } = {}) {
     timeWindow: '1 minute'
   });
   await app.register(cors, {
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     origin(origin, callback) {
       callback(null, !origin || config.corsOrigins.includes(origin));
     }

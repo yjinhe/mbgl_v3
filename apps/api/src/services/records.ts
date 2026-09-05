@@ -1,6 +1,8 @@
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import {
   DEFAULT_GLUCOSE_TARGET,
+  addDaysToKey,
+  localDayKey,
   bpSafetyAlert,
   bpStatus,
   coefficientOfVariation,
@@ -29,7 +31,19 @@ import {
 
 export const METRICS: Metric[] = ['glucose', 'bp', 'lipid', 'uric'];
 
-const GLUCOSE_PERIODS = new Set(['fasting', 'after_breakfast', 'before_lunch', 'after_lunch', 'random', 'before_dinner', 'after_dinner', 'bedtime', 'dawn']);
+export const GLUCOSE_PERIODS = new Set([
+  'fasting',
+  'post_meal_1h',
+  'post_meal_2h',
+  'after_breakfast',
+  'before_lunch',
+  'after_lunch',
+  'random',
+  'before_dinner',
+  'after_dinner',
+  'bedtime',
+  'dawn'
+]);
 const BP_PERIODS = new Set(['morning', 'daytime', 'evening', 'night']);
 const COMMON_RECORD_FIELDS = ['measuredAt', 'note'] as const;
 const METRIC_RECORD_FIELDS: Record<Metric, ReadonlySet<string>> = {
@@ -85,6 +99,9 @@ function isValidIsoDateTime(value: string): boolean {
 function validateCommonRecordFields(body: Record<string, unknown>): ValidationResult {
   if (body.measuredAt !== undefined && (typeof body.measuredAt !== 'string' || body.measuredAt.length > 40 || !isValidIsoDateTime(body.measuredAt))) {
     return invalid('测量时间不正确');
+  }
+  if (typeof body.measuredAt === 'string' && Date.parse(body.measuredAt) > Date.now() + 60_000) {
+    return invalid('测量时间不能晚于现在');
   }
   if (body.note !== undefined && (typeof body.note !== 'string' || body.note.length > MAX_NOTE_LENGTH)) {
     return invalid(`备注不能超过 ${MAX_NOTE_LENGTH} 个字符`);
@@ -224,6 +241,8 @@ export function periodName(period: string): string {
   return (
     {
       fasting: '空腹',
+      post_meal_1h: '餐后1小时',
+      post_meal_2h: '餐后2小时',
       after_breakfast: '早餐后',
       before_lunch: '午餐前',
       after_lunch: '午餐后',
@@ -240,7 +259,7 @@ export function bpPeriodName(period: string): string {
   return ({ morning: '晨起', daytime: '白天', evening: '晚间', night: '夜间' } as Record<string, string>)[period] ?? period;
 }
 
-export async function recomputeDailySummary(prisma: PrismaClient, userId: string, dateKey: string, target = DEFAULT_GLUCOSE_TARGET) {
+export async function recomputeDailySummary(prisma: PrismaClient | Prisma.TransactionClient, userId: string, dateKey: string, target = DEFAULT_GLUCOSE_TARGET) {
   const start = new Date(`${dateKey}T00:00:00+08:00`);
   const end = new Date(start.getTime() + 86400000);
   const records = await prisma.glucoseRecord.findMany({
@@ -309,16 +328,21 @@ export function validateMetricInput(metric: Metric, body: unknown, unit: Unit = 
   return result.ok ? { ok: true } : invalid(result.message ?? '请输入尿酸值');
 }
 
-export async function statsForMetric(prisma: PrismaClient, userId: string, user: any, metric: Metric, range: number) {
-  const since = new Date(Date.now() - (range - 1) * 86400000);
-  since.setHours(0, 0, 0, 0);
+export function recordRange(range: number, now = new Date()) {
+  const startKey = addDaysToKey(localDayKey(now), 1 - range);
+  return { gte: new Date(`${startKey}T00:00:00+08:00`), lte: now };
+}
+
+export async function statsForMetric(prisma: PrismaClient, userId: string, user: any, metric: Metric, range: number, period?: GlucosePeriod) {
+  const measuredAt = recordRange(range);
   if (metric === 'glucose') {
-    const records = await prisma.glucoseRecord.findMany({ where: { userId, deletedAt: null, measuredAt: { gte: since } }, orderBy: { measuredAt: 'asc' } });
+    const records = await prisma.glucoseRecord.findMany({ where: { userId, deletedAt: null, measuredAt, ...(period ? { period } : {}) }, orderBy: [{ measuredAt: 'asc' }, { id: 'asc' }] });
     const values = records.map((record) => toNum(record.valueMmol) ?? 0);
     const tir = glucoseTir(values);
     const avg = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
     return {
       range,
+      period: period ?? 'all',
       n: records.length,
       avg,
       sd: standardDeviation(values),
@@ -330,25 +354,26 @@ export async function statsForMetric(prisma: PrismaClient, userId: string, user:
       gmi: gmiFromAverage(avg),
       max: values.length ? Math.max(...values) : null,
       min: values.length ? Math.min(...values) : null,
-      series: { mode: range <= 7 ? 'detail' : 'summary', points: records.map((record) => serializeGlucose(record, user)) }
+      series: { mode: 'detail', points: records.map((record) => serializeGlucose(record, user, user.unit)) }
     };
   }
   if (metric === 'bp') {
-    const records = await prisma.bpRecord.findMany({ where: { userId, deletedAt: null, measuredAt: { gte: since } }, orderBy: { measuredAt: 'asc' } });
+    const records = await prisma.bpRecord.findMany({ where: { userId, deletedAt: null, measuredAt }, orderBy: { measuredAt: 'asc' } });
+    const pulses = records.flatMap((record) => record.pulse == null ? [] : [record.pulse]);
     return {
       n: records.length,
       avgSbp: records.length ? Math.round(records.reduce((sum, r) => sum + r.sbp, 0) / records.length) : 0,
       avgDbp: records.length ? Math.round(records.reduce((sum, r) => sum + r.dbp, 0) / records.length) : 0,
-      avgPulse: records.length ? Math.round(records.reduce((sum, r) => sum + (r.pulse ?? 0), 0) / records.length) : 0,
+      avgPulse: pulses.length ? Math.round(pulses.reduce((sum, value) => sum + value, 0) / pulses.length) : null,
       okRate: records.length ? records.filter((r) => bpStatus(r.sbp, r.dbp).key === 'ok').length / records.length : 0,
       series: records.map(serializeBp)
     };
   }
   if (metric === 'lipid') {
-    const records = await prisma.lipidRecord.findMany({ where: { userId, deletedAt: null, measuredAt: { gte: since } }, orderBy: { measuredAt: 'asc' } });
+    const records = await prisma.lipidRecord.findMany({ where: { userId, deletedAt: null, measuredAt }, orderBy: { measuredAt: 'asc' } });
     return { n: records.length, latest: records.length ? serializeLipid(records.at(-1)) : null, series: records.map(serializeLipid) };
   }
-  const records = await prisma.uricRecord.findMany({ where: { userId, deletedAt: null, measuredAt: { gte: since } }, orderBy: { measuredAt: 'asc' } });
+  const records = await prisma.uricRecord.findMany({ where: { userId, deletedAt: null, measuredAt }, orderBy: { measuredAt: 'asc' } });
   return {
     n: records.length,
     avg: records.length ? Math.round(records.reduce((sum, r) => sum + r.value, 0) / records.length) : 0,

@@ -1,0 +1,22 @@
+<view class="app-stage"><view class="screen">
+  <view class="safe-navbar" style="{{navStyle}}"><button class="back" bindtap="back">‹</button><view class="title">给家人看</view></view>
+  <view class="pages"><view class="page report-page">
+    <view wx:if="{{!authed}}" class="demo-banner"><view class="demo-title">体验大字记录图片</view><view class="demo-copy">以下图片仅使用演示数据。登录后可生成自己的近7天记录。</view><button class="demo-login" bindtap="goLogin">去登录，生成我的记录 ›</button></view>
+    <view wx:if="{{error}}" class="card state-card"><view>{{error}}</view><button class="btn primary" bindtap="load">重新加载</button></view>
+    <block wx:elif="{{pageCount}}">
+      <view class="report-heading">近7天 · 共 {{totalRecords}} 条</view><view class="report-range">{{rangeText}} · 北京时间</view>
+      <view class="report-tip">共 {{pageCount}} 张图片，按指标和时段分别整理。可逐张查看后，自行选择发送给谁。</view>
+      <view class="page-controls"><button disabled="{{pageIndex === 0 || generating}}" data-step="-1" bindtap="changePage">上一张</button><text>第 {{pageIndex + 1}} / {{pageCount}} 张</text><button disabled="{{pageIndex + 1 >= pageCount || generating}}" data-step="1" bindtap="changePage">下一张</button></view>
+      <view class="section-label">{{sectionTitle}}</view>
+      <view wx:if="{{generating}}" class="card state-card">正在生成大字图片…</view>
+      <view wx:elif="{{imageError}}" class="card state-card"><view>{{imageError}}</view><button class="btn primary" bindtap="renderCurrent">重新生成</button></view>
+      <image wx:elif="{{imagePath}}" class="report-image" src="{{imagePath}}" mode="widthFix" bindtap="preview" />
+      <view class="report-actions"><button class="btn primary" disabled="{{!imagePath || generating}}" bindtap="shareImage">转发这一张</button><button class="btn secondary" disabled="{{!imagePath || generating || saving}}" loading="{{saving}}" bindtap="saveImage">保存到相册</button></view>
+      <button wx:if="{{imagePath}}" class="preview-button" bindtap="preview">点击放大查看图片</button>
+      <view class="foot-note">图片包含个人健康记录，请选择你愿意分享的家人。记录仅供沟通参考，不提供诊疗建议。</view>
+    </block>
+    <view wx:elif="{{loading}}" class="empty">正在加载近7天记录…</view>
+    <view wx:else class="card state-card">近7天还没有记录，记一笔后就可以生成图片。</view>
+  </view></view>
+  <canvas canvas-id="weeklyReportCanvas" class="report-canvas" style="width:1000px;height:{{canvasHeight}}px"></canvas>
+</view></view>

@@ -77,7 +77,7 @@ test('平台管理员通过独立登录模式进入后台', async ({ page }) => 
   await page.goto('http://127.0.0.1:5174/?admin=1');
   await expect(page.getByRole('button', { name: '平台管理员' })).toHaveClass(/on/);
   await page.getByRole('button', { name: '登录' }).click();
-  await expect(page.getByRole('main').getByText('平台概览')).toBeVisible();
+  await expect(page.getByRole('main').getByRole('heading', { name: '用户与记录' })).toBeVisible();
 });
 
 test('C端可切换血糖单位到 mg/dL', async ({ page }) => {

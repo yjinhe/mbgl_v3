@@ -41,6 +41,8 @@ export interface LipidValues {
 
 export type GlucosePeriod =
   | 'fasting'
+  | 'post_meal_1h'
+  | 'post_meal_2h'
   | 'after_breakfast'
   | 'before_lunch'
   | 'after_lunch'

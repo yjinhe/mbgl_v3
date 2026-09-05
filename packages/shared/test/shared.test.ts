@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   DEFAULT_GLUCOSE_TARGET,
+  GLUCOSE_PERIOD_MAP,
   bpSafetyAlert,
   displayGlucose,
   glucoseSafetyAlert,
@@ -64,6 +65,15 @@ describe('glucose rules', () => {
     [33.3, 'after_lunch', 'dhigh']
   ] as const)('classifies glucose %s %s as %s', (value, period, key) => {
     expect(glucoseStatus(value, period, DEFAULT_GLUCOSE_TARGET).key).toBe(key);
+  });
+
+  test('keeps one-hour and two-hour post-meal records distinct while using post-meal targets', () => {
+    expect(GLUCOSE_PERIOD_MAP.post_meal_1h.name).toBe('餐后1小时');
+    expect(GLUCOSE_PERIOD_MAP.post_meal_2h.name).toBe('餐后2小时');
+    expect(GLUCOSE_PERIOD_MAP.post_meal_1h.type).toBe('post');
+    expect(GLUCOSE_PERIOD_MAP.post_meal_2h.type).toBe('post');
+    expect(glucoseStatus(10.1, 'post_meal_1h', DEFAULT_GLUCOSE_TARGET).key).toBe('hi');
+    expect(glucoseStatus(10.1, 'post_meal_2h', DEFAULT_GLUCOSE_TARGET).key).toBe('hi');
   });
 
   test.each([

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import archiver from 'archiver';
+import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { config } from '../env.js';
@@ -7,12 +8,15 @@ import { requireAuth, type AppToken } from '../plugins/auth.js';
 import { conflict, notFound, validationError } from '../services/http.js';
 import {
   METRICS,
+  GLUCOSE_PERIODS,
   metricSafety,
   periodName,
   recomputeDailySummary,
+  recordRange,
   serializeRecord,
   statsForMetric,
   userStats,
+  userTarget,
   validateMetricInput
 } from '../services/records.js';
 import {
@@ -23,7 +27,7 @@ import {
 } from '../services/wechat.js';
 import { recycleCutoff, recycleDaysLeft } from '../services/recycle.js';
 import { hashPassword, verifyPassword } from '../services/password.js';
-import { inferBpPeriod, inferGlucosePeriod, localDayKey, type GlucosePeriod, type Metric } from '@tangji/shared';
+import { inferBpPeriod, inferGlucosePeriod, localDayKey, validateGlucoseTarget, type GlucosePeriod, type Metric } from '@tangji/shared';
 
 const metricSchema = z.enum(['glucose', 'bp', 'lipid', 'uric']);
 const loginNameSchema = z.string().trim().min(4).max(32).regex(/^[A-Za-z0-9_.-]+$/).transform((value) => value.toLowerCase());
@@ -264,7 +268,7 @@ export async function appRoutes(app: FastifyInstance) {
         .optional()
     });
     const body = schema.parse(request.body);
-    if (body.target && !(body.target.fastingLow < body.target.fastingHigh && body.target.fastingHigh <= body.target.postMealHigh)) {
+    if (body.target && !validateGlucoseTarget(body.target)) {
       return validationError(reply, '目标范围设置不正确');
     }
     const updated = await app.prisma.user.update({
@@ -309,13 +313,14 @@ export async function appRoutes(app: FastifyInstance) {
       await tx.pharmacyAccessLog.deleteMany({ where: { userId: user.id } });
       await tx.pharmacyCustomer.deleteMany({ where: { userId: user.id } });
       await tx.dailySummary.deleteMany({ where: { userId: user.id } });
+      await tx.recordSubmission.deleteMany({ where: { userId: user.id } });
       await tx.glucoseRecord.deleteMany({ where: { userId: user.id } });
       await tx.bpRecord.deleteMany({ where: { userId: user.id } });
       await tx.lipidRecord.deleteMany({ where: { userId: user.id } });
       await tx.uricRecord.deleteMany({ where: { userId: user.id } });
       await tx.user.update({
         where: { id: user.id },
-        data: { deactivatedAt: new Date(), nickname: '已注销用户', avatarUrl: null, sex: null }
+        data: { deactivatedAt: new Date(), nickname: '已注销用户', adminNote: '', avatarUrl: null, sex: null }
       });
     }, { timeout: 30_000 });
     return reply.code(204).send();
@@ -367,10 +372,15 @@ export async function appRoutes(app: FastifyInstance) {
     const measuredAt = new Date(body.measuredAt ?? Date.now());
     if (Number.isNaN(measuredAt.getTime())) return validationError(reply, '测量时间不正确');
     const note = String(body.note ?? '').slice(0, 50);
-    const created = await createRecord(app, metric, user.id, body, measuredAt, note, (result as any).valueMmol);
-    if (metric === 'glucose') await recomputeDailySummary(app.prisma, user.id, localDayKey(measuredAt));
-    const record = serializeRecord(metric, created, user);
-    return reply.code(201).send({ record, safetyAlert: metricSafety(metric, { ...body, valueMmol: (result as any).valueMmol }) });
+    const key = z.string().min(8).max(120).regex(/^[A-Za-z0-9_-]+$/).optional().parse(request.headers['idempotency-key']);
+    try {
+      const saved = await createRecordOnce(app, metric, user, body, measuredAt, note, (result as any).valueMmol, key);
+      const record = serializeRecord(metric, saved.record, user);
+      return reply.code(saved.replayed ? 200 : 201).send({ record, safetyAlert: metricSafety(metric, record) });
+    } catch (error) {
+      if (error instanceof RecordSubmissionError) return conflict(reply, error.code, error.message);
+      throw error;
+    }
   });
 
   app.patch('/records/:metric/:id', {
@@ -379,20 +389,23 @@ export async function appRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const metric = metricSchema.parse((request.params as any).metric);
     const user = await currentUser(app, request.auth as AppToken);
-    const existing = await findRecord(app, metric, (request.params as any).id, user.id);
-    if (!existing) return notFound(reply);
     const body = request.body as any;
     const result = validateMetricInput(metric, body, body?.unit ?? user.unit);
     if (!result.ok) return validationError(reply, result.message);
-    const measuredAt = new Date(body.measuredAt ?? existing.measuredAt);
-    if (Number.isNaN(measuredAt.getTime())) return validationError(reply, '测量时间不正确');
-    const updated = await updateRecord(app, metric, existing.id, body, measuredAt, String(body.note ?? existing.note).slice(0, 50), (result as any).valueMmol);
-    if (metric === 'glucose') {
-      const oldDay = localDayKey(existing.measuredAt);
-      const newDay = localDayKey(measuredAt);
-      await recomputeDailySummary(app.prisma, user.id, oldDay);
-      if (newDay !== oldDay) await recomputeDailySummary(app.prisma, user.id, newDay);
-    }
+    const updated = await app.prisma.$transaction(async (tx) => {
+      const existing = await findRecord({ prisma: tx }, metric, (request.params as any).id, user.id);
+      if (!existing) return null;
+      const measuredAt = new Date(body.measuredAt ?? existing.measuredAt);
+      const record = await updateRecord({ prisma: tx }, metric, existing.id, body, measuredAt, String(body.note ?? existing.note).slice(0, 50), (result as any).valueMmol);
+      if (metric === 'glucose') {
+        const oldDay = localDayKey(existing.measuredAt);
+        const newDay = localDayKey(measuredAt);
+        await recomputeDailySummary(tx, user.id, oldDay, userTarget(user));
+        if (newDay !== oldDay) await recomputeDailySummary(tx, user.id, newDay, userTarget(user));
+      }
+      return record;
+    });
+    if (!updated) return notFound(reply);
     return { record: serializeRecord(metric, updated, user), safetyAlert: metricSafety(metric, { ...body, valueMmol: (result as any).valueMmol }) };
   });
 
@@ -402,10 +415,14 @@ export async function appRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const metric = metricSchema.parse((request.params as any).metric);
     const user = await currentUser(app, request.auth as AppToken);
-    const existing = await findRecord(app, metric, (request.params as any).id, user.id);
-    if (!existing) return notFound(reply);
-    await softDeleteRecord(app, metric, existing.id);
-    if (metric === 'glucose') await recomputeDailySummary(app.prisma, user.id, localDayKey(existing.measuredAt));
+    const deleted = await app.prisma.$transaction(async (tx) => {
+      const existing = await findRecord({ prisma: tx }, metric, (request.params as any).id, user.id);
+      if (!existing) return false;
+      await softDeleteRecord({ prisma: tx }, metric, existing.id);
+      if (metric === 'glucose') await recomputeDailySummary(tx, user.id, localDayKey(existing.measuredAt), userTarget(user));
+      return true;
+    });
+    if (!deleted) return notFound(reply);
     return reply.code(204).send();
   });
 
@@ -440,17 +457,28 @@ export async function appRoutes(app: FastifyInstance) {
   app.post('/records/:metric/:id/restore', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
     const metric = metricSchema.parse((request.params as any).metric);
     const user = await currentUser(app, request.auth as AppToken);
-    const existing = await findRecord(app, metric, (request.params as any).id, user.id, true);
-    if (!existing || !existing.deletedAt || existing.deletedAt < recycleCutoff()) return notFound(reply);
-    const restored = await restoreRecord(app, metric, existing.id);
-    if (metric === 'glucose') await recomputeDailySummary(app.prisma, user.id, localDayKey(existing.measuredAt));
+    const restored = await app.prisma.$transaction(async (tx) => {
+      const existing = await findRecord({ prisma: tx }, metric, (request.params as any).id, user.id, true);
+      if (!existing || !existing.deletedAt || existing.deletedAt < recycleCutoff()) return null;
+      const record = await restoreRecord({ prisma: tx }, metric, existing.id);
+      if (metric === 'glucose') await recomputeDailySummary(tx, user.id, localDayKey(existing.measuredAt), userTarget(user));
+      return record;
+    });
+    if (!restored) return notFound(reply);
     return { record: serializeRecord(metric, restored, user) };
   });
 
   app.get('/stats', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request) => {
-    const query = z.object({ metric: metricSchema, range: z.coerce.number().int().min(1).max(365).default(7) }).parse(request.query);
+    const query = z.object({
+      metric: metricSchema,
+      range: z.coerce.number().int().min(1).max(365).default(7),
+      period: z.string().refine((value) => value === 'all' || GLUCOSE_PERIODS.has(value), '测量时段不正确').optional()
+    }).parse(request.query);
+    if (query.metric !== 'glucose' && query.period && query.period !== 'all') {
+      throw new z.ZodError([{ code: 'custom', path: ['period'], message: '仅血糖支持餐前餐后筛选' }]);
+    }
     const user = await currentUser(app, request.auth as AppToken);
-    return statsForMetric(app.prisma, user.id, user, query.metric, query.range);
+    return statsForMetric(app.prisma, user.id, user, query.metric, query.range, query.period === 'all' ? undefined : query.period as GlucosePeriod | undefined);
   });
 
   app.get('/pharmacy/invite/:code', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request, reply) => {
@@ -534,13 +562,12 @@ export async function appRoutes(app: FastifyInstance) {
 
 async function weeklyReport(app: FastifyInstance, user: any) {
   const rangeDays = 7;
-  const fromDate = new Date(Date.now() - (rangeDays - 1) * 86400000);
-  fromDate.setHours(0, 0, 0, 0);
   const toDate = new Date();
+  const fromDate = recordRange(rangeDays, toDate).gte;
   const [glucose, bp, lipid, uric] = await Promise.all([
     statsForMetric(app.prisma, user.id, user, 'glucose', rangeDays),
     statsForMetric(app.prisma, user.id, user, 'bp', rangeDays),
-    weeklyLipidSection(app, user, fromDate),
+    weeklyLipidSection(app, user, fromDate, toDate),
     statsForMetric(app.prisma, user.id, user, 'uric', rangeDays)
   ]);
   const sections: Record<string, unknown> = {};
@@ -572,9 +599,9 @@ async function countTodayRecords(app: FastifyInstance, userId: string) {
   return counts.reduce((sum, value) => sum + value, 0);
 }
 
-async function weeklyLipidSection(app: FastifyInstance, user: any, fromDate: Date) {
+async function weeklyLipidSection(app: FastifyInstance, user: any, fromDate: Date, toDate: Date) {
   const records = await app.prisma.lipidRecord.findMany({
-    where: { userId: user.id, deletedAt: null, measuredAt: { gte: fromDate } },
+    where: { userId: user.id, deletedAt: null, measuredAt: { gte: fromDate, lte: toDate } },
     orderBy: { measuredAt: 'asc' }
   });
   const items = records.map((record) => serializeRecord('lipid', record, user));
@@ -685,12 +712,60 @@ async function findRecordsAsc(app: FastifyInstance, metric: Metric, where: any):
   return model.findMany({ where, orderBy: { measuredAt: 'asc' } });
 }
 
-async function findRecord(app: FastifyInstance, metric: Metric, id: string, userId: string, includeDeleted = false) {
+async function findRecord(app: RecordStore, metric: Metric, id: string, userId: string, includeDeleted = false) {
   const model = modelFor(app, metric);
   return model.findFirst({ where: { id, userId, ...(includeDeleted ? {} : { deletedAt: null }) } });
 }
 
-async function createRecord(app: FastifyInstance, metric: Metric, userId: string, body: any, measuredAt: Date, note: string, valueMmol?: number) {
+type RecordStore = { prisma: Prisma.TransactionClient };
+
+class RecordSubmissionError extends Error {
+  constructor(public code: string, message: string) { super(message); }
+}
+
+function canonicalRequest(value: any): any {
+  if (Array.isArray(value)) return value.map(canonicalRequest);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalRequest(value[key])]));
+  }
+  return value;
+}
+
+async function createRecordOnce(app: FastifyInstance, metric: Metric, user: any, body: any, measuredAt: Date, note: string, valueMmol: number | undefined, key?: string) {
+  const requestHash = createHash('sha256').update(JSON.stringify(canonicalRequest({ metric, body, ...(metric === 'glucose' ? { unit: body.unit ?? user.unit } : {}) }))).digest('hex');
+  const replay = async () => {
+    if (!key) return null;
+    const submission = await app.prisma.recordSubmission.findUnique({ where: { userId_key: { userId: user.id, key } } });
+    if (!submission) return null;
+    if (submission.metric !== metric || submission.requestHash !== requestHash) {
+      throw new RecordSubmissionError('IDEMPOTENCY_CONFLICT', '这笔记录的内容已改变，请确认后重新保存');
+    }
+    const record = submission.recordId ? await findRecord(app, metric, submission.recordId, user.id) : null;
+    if (!record) throw new RecordSubmissionError('RECORD_UNAVAILABLE', '这笔记录已经删除，请刷新历史记录');
+    return { record, replayed: true };
+  };
+  const existing = await replay();
+  if (existing) return existing;
+  try {
+    return await app.prisma.$transaction(async (tx) => {
+      // Reserve the request first. The unique key and record commit together,
+      // so a dropped response can be retried without inserting another record.
+      const submission = key ? await tx.recordSubmission.create({ data: { userId: user.id, key, metric, requestHash } }) : null;
+      const record = await createRecord({ prisma: tx }, metric, user.id, body, measuredAt, note, valueMmol);
+      if (metric === 'glucose') await recomputeDailySummary(tx, user.id, localDayKey(measuredAt), userTarget(user));
+      if (submission) await tx.recordSubmission.update({ where: { id: submission.id }, data: { recordId: record.id } });
+      return { record, replayed: false };
+    });
+  } catch (error) {
+    if (key && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const saved = await replay();
+      if (saved) return saved;
+    }
+    throw error;
+  }
+}
+
+async function createRecord(app: RecordStore, metric: Metric, userId: string, body: any, measuredAt: Date, note: string, valueMmol?: number) {
   if (metric === 'glucose') {
     if (valueMmol == null) throw new Error('valueMmol is required for glucose');
     return app.prisma.glucoseRecord.create({
@@ -737,18 +812,18 @@ async function createRecord(app: FastifyInstance, metric: Metric, userId: string
   });
 }
 
-async function updateRecord(app: FastifyInstance, metric: Metric, id: string, body: any, measuredAt: Date, note: string, valueMmol?: number) {
+async function updateRecord(app: RecordStore, metric: Metric, id: string, body: any, measuredAt: Date, note: string, valueMmol?: number) {
   if (metric === 'glucose') return app.prisma.glucoseRecord.update({ where: { id }, data: { valueMmol, period: body.period, measuredAt, tags: JSON.stringify(body.tags ?? []), note } });
   if (metric === 'bp') return app.prisma.bpRecord.update({ where: { id }, data: { sbp: Number(body.sbp), dbp: Number(body.dbp), pulse: body.pulse == null ? null : Number(body.pulse), period: body.period, measuredAt, tags: JSON.stringify(body.tags ?? []), note } });
   if (metric === 'lipid') return app.prisma.lipidRecord.update({ where: { id }, data: { tc: body.tc == null ? null : Number(body.tc), tg: body.tg == null ? null : Number(body.tg), ldl: body.ldl == null ? null : Number(body.ldl), hdl: body.hdl == null ? null : Number(body.hdl), fasting: body.fasting ?? true, measuredAt, note } });
   return app.prisma.uricRecord.update({ where: { id }, data: { value: Number(body.value), fasting: body.fasting ?? true, measuredAt, note } });
 }
 
-async function softDeleteRecord(app: FastifyInstance, metric: Metric, id: string) {
+async function softDeleteRecord(app: RecordStore, metric: Metric, id: string) {
   return modelFor(app, metric).update({ where: { id }, data: { deletedAt: new Date() } });
 }
 
-async function restoreRecord(app: FastifyInstance, metric: Metric, id: string) {
+async function restoreRecord(app: RecordStore, metric: Metric, id: string) {
   return modelFor(app, metric).update({ where: { id }, data: { deletedAt: null } });
 }
 
@@ -759,7 +834,7 @@ async function deleteRecordPermanently(app: FastifyInstance, metric: Metric, id:
   ]);
 }
 
-function modelFor(app: FastifyInstance, metric: Metric): any {
+function modelFor(app: RecordStore, metric: Metric): any {
   if (metric === 'glucose') return app.prisma.glucoseRecord;
   if (metric === 'bp') return app.prisma.bpRecord;
   if (metric === 'lipid') return app.prisma.lipidRecord;

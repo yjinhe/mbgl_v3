@@ -1,188 +1,131 @@
 const { getToken, request } = require('../../utils/api');
-const {
-  captureDataLease,
-  isDataLeaseCurrent,
-  isPageFresh,
-  markPageFresh
-} = require('../../utils/data-cache');
+const { captureDataLease, isDataLeaseCurrent, isPageFresh, markPageFresh } = require('../../utils/data-cache');
 const { ensureLogin, fetchMe } = require('../../utils/page');
 const { demoStats } = require('../../utils/demo');
-const { displayGlucoseValue, glucoseUnitText, metrics } = require('../../utils/metrics');
+const { lipidItems, metrics } = require('../../utils/metrics');
+const { PERIOD_FILTERS, buildStatsView, seriesPoints } = require('../../utils/stats-view');
 const { consumeStatMetric, syncTabBar } = require('../../utils/tabbar');
 
 const STATS_CACHE_DOMAINS = ['records', 'profile'];
 
 Page({
   data: {
-    authed: false,
-    loading: false,
-    metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === 'glucose', className: item.key === 'glucose' ? 'on' : '' })),
-    metric: 'glucose',
-    unit: 'mmol',
-    range: 7,
-    range7Class: 'on',
-    range30Class: '',
-    range90Class: '',
-    summary: [],
-    bars: [],
-    hasBars: false,
-    footnote: '数据统计仅供个人记录参考，不作为判断身体状况的依据。',
-    navStyle: ''
+    authed: false, loading: false, error: '',
+    metrics: metrics.map((item) => Object.assign({}, item, { className: item.key === 'glucose' ? 'on' : '' })),
+    metric: 'glucose', unit: 'mmol', range: 7, range7Class: 'on', range30Class: '', range90Class: '',
+    period: 'all', periods: PERIOD_FILTERS.map((item) => Object.assign({}, item, { className: item.key === 'all' ? 'on' : '' })),
+    lipidKey: 'tc', lipidOptions: lipidItems.map((item) => Object.assign({}, item, { className: item.key === 'tc' ? 'on' : '' })),
+    summary: [], bars: [], visibleRows: [], visibleCount: 0, totalCount: 0, hasMoreRows: false, hasBars: false,
+    footnote: '数据仅供个人记录与沟通参考，不作为判断身体状况的依据。', navStyle: ''
   },
 
-  onLoad() {
-    this.setData({ navStyle: getApp().globalData.navStyle });
-  },
+  onLoad() { this.setData({ navStyle: getApp().globalData.navStyle }); },
 
   onShow() {
     syncTabBar(this);
     const selected = consumeStatMetric();
-    if (selected && selected !== this.data.metric) {
-      this.setMetricValue(selected);
-      return;
-    }
+    if (selected && selected !== this.data.metric) return this.setMetricValue(selected);
     if (!this.isDataFresh()) this.load();
   },
 
-  setMetric(event) {
-    this.setMetricValue(event.currentTarget.dataset.metric);
-  },
+  onUnload() { this._loadSeq = (this._loadSeq || 0) + 1; },
+
+  setMetric(event) { this.setMetricValue(event.currentTarget.dataset.metric); },
 
   setRange(event) {
     const range = Number(event.currentTarget.dataset.range);
-    if (!range || range === this.data.range) return;
-    this.setData({
-      range,
-      range7Class: range === 7 ? 'on' : '',
-      range30Class: range === 30 ? 'on' : '',
-      range90Class: range === 90 ? 'on' : ''
-    }, () => this.load());
+    if (![7, 30, 90].includes(range) || range === this.data.range) return;
+    this.setData({ range, range7Class: range === 7 ? 'on' : '', range30Class: range === 30 ? 'on' : '', range90Class: range === 90 ? 'on' : '' }, () => this.load());
+  },
+
+  setPeriod(event) {
+    const period = event.currentTarget.dataset.period;
+    if (!PERIOD_FILTERS.some((item) => item.key === period) || period === this.data.period) return;
+    this.setData({ period, periods: PERIOD_FILTERS.map((item) => Object.assign({}, item, { className: item.key === period ? 'on' : '' })) }, () => this.load());
+  },
+
+  setLipid(event) {
+    const lipidKey = event.currentTarget.dataset.key;
+    if (!lipidItems.some((item) => item.key === lipidKey) || lipidKey === this.data.lipidKey) return;
+    this.setData({ lipidKey, lipidOptions: lipidItems.map((item) => Object.assign({}, item, { className: item.key === lipidKey ? 'on' : '' })) });
+    if (this._statsData) this.applyStats(this._statsData, this.data.unit);
   },
 
   setMetricValue(metric) {
-    if (!metric) return;
+    if (!metrics.some((item) => item.key === metric)) return;
     if (metric === this.data.metric) {
       if (!this.isDataFresh()) this.load();
       return;
     }
-    this.setData({
-      metric,
-      metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === metric, className: item.key === metric ? 'on' : '' }))
-    }, () => this.load());
+    this.setData({ metric, metrics: metrics.map((item) => Object.assign({}, item, { className: item.key === metric ? 'on' : '' })) }, () => this.load());
   },
 
   async load() {
-    const metric = this.data.metric;
-    const range = this.data.range;
+    const { metric, range, period } = this.data;
     const lease = captureDataLease(getToken(), STATS_CACHE_DOMAINS);
-    const loadingKey = `${this.cacheKey(metric, range)}:${lease.generation}:${lease.versions.records}:${lease.versions.profile}`;
+    const key = this.cacheKey();
+    const loadingKey = `${key}:${lease.generation}:${lease.versions.records}:${lease.versions.profile}`;
     if (this._loadingKey === loadingKey) return;
     this._loadingKey = loadingKey;
     const loadSeq = (this._loadSeq || 0) + 1;
     this._loadSeq = loadSeq;
+    this._statsData = null;
+    this._detailRows = [];
+    this.setData({ loading: true, error: '', summary: [], bars: [], hasBars: false, visibleRows: [], totalCount: 0, hasMoreRows: false });
+    const current = () => loadSeq === this._loadSeq && key === this.cacheKey() && isDataLeaseCurrent(lease, getToken());
     try {
       if (!(await ensureLogin(this))) {
-        if (loadSeq !== this._loadSeq || !isDataLeaseCurrent(lease, getToken())) return;
-        this.setData(Object.assign({ authed: false, loading: false, unit: 'mmol' }, this.decorate(demoStats(metric, range), 'mmol')));
-        this.markDataFresh(metric, range);
+        if (!current()) return;
+        const sample = demoStats(metric, range);
+        sample.series = seriesPoints(sample).map((point, index) => Object.assign({}, point, {
+          period: metric === 'glucose' ? ['fasting', 'post_meal_1h', 'post_meal_2h'][index % 3] : metric === 'bp' ? 'morning' : undefined,
+          dbp: metric === 'bp' ? 78 + index : undefined,
+          tc: metric === 'lipid' ? point.value : undefined,
+          tg: metric === 'lipid' ? 1.3 + index * 0.1 : undefined,
+          ldl: metric === 'lipid' ? 2.7 + index * 0.1 : undefined,
+          hdl: metric === 'lipid' ? 1.2 : undefined
+        }));
+        this.setData({ authed: false, unit: 'mmol' });
+        this.applyStats(sample, 'mmol');
+        this.markDataFresh(key);
         return;
       }
-      const [data, me] = await Promise.all([
-        request(`/api/app/stats?metric=${metric}&range=${range}`),
-        fetchMe()
-      ]);
-      if (
-        loadSeq !== this._loadSeq
-          || metric !== this.data.metric
-          || range !== this.data.range
-          || !isDataLeaseCurrent(lease, getToken())
-      ) return;
+      this.setData({ authed: true });
+      const queryPeriod = metric === 'glucose' ? `&period=${period}` : '';
+      const [data, me] = await Promise.all([request(`/api/app/stats?metric=${metric}&range=${range}${queryPeriod}`), fetchMe()]);
+      if (!current()) return;
       const unit = me && me.unit ? me.unit : 'mmol';
-      this.setData(Object.assign({ authed: true, unit }, this.decorate(data || {}, unit)));
-      this.markDataFresh(metric, range);
+      this.setData({ authed: true, unit });
+      this.applyStats(data || {}, unit);
+      this.markDataFresh(key);
     } catch (error) {
-      if (loadSeq === this._loadSeq) {
-        wx.showToast({ title: error.message || '加载失败', icon: 'none' });
-      }
+      if (current()) this.setData({ error: error.message || '暂时没能加载，请检查网络后重试' });
     } finally {
+      if (loadSeq === this._loadSeq) this.setData({ loading: false });
       if (this._loadingKey === loadingKey) this._loadingKey = '';
     }
   },
 
-  cacheKey(metric = this.data.metric, range = this.data.range) {
-    return `stats:${metric}:${range}`;
+  applyStats(data, unit) {
+    this._statsData = data;
+    const view = this.decorate(data, unit);
+    this._detailRows = view.detailRows;
+    delete view.detailRows;
+    this.setData(Object.assign({}, view, { visibleRows: this._detailRows.slice(0, 20), visibleCount: Math.min(20, this._detailRows.length), hasMoreRows: this._detailRows.length > 20 }));
   },
 
-  isDataFresh() {
-    return isPageFresh(this, this.cacheKey(), STATS_CACHE_DOMAINS, getToken());
+  showMoreRows() {
+    const count = Math.min(this.data.visibleCount + 20, this._detailRows.length);
+    this.setData({ visibleRows: this._detailRows.slice(0, count), visibleCount: count, hasMoreRows: count < this._detailRows.length });
   },
 
-  markDataFresh(metric = this.data.metric, range = this.data.range) {
-    markPageFresh(this, this.cacheKey(metric, range), STATS_CACHE_DOMAINS, getToken());
-  },
+  decorate(data, unit = this.data.unit) { return buildStatsView(data, { metric: this.data.metric, range: this.data.range, period: this.data.period, lipidKey: this.data.lipidKey, unit }); },
 
-  decorate(data, unit = this.data.unit) {
-    const metric = this.data.metric;
-    const points = (data.series && (data.series.points || data.series)) || [];
-    const bars = Array.isArray(points)
-      ? points.slice(-14).map((point, index) => {
-        const raw = point.valueMmol || point.avg || point.value || point.sbp || point.v || 0;
-        const height = Math.max(18, Math.min(150, Number(raw) * (metric === 'bp' ? 0.7 : metric === 'uric' ? 0.18 : 10)));
-        return { id: `${point.measuredAt || point.date || index}`, height };
-      })
-      : [];
+  cacheKey() { return `stats:${this.data.metric}:${this.data.range}:${this.data.metric === 'glucose' ? this.data.period : 'all'}`; },
 
-    if (metric === 'glucose') {
-      const unitText = glucoseUnitText(unit);
-      return {
-        summary: [
-          { label: '记录数', value: data.n || 0, unit: '次' },
-          { label: '平均血糖', value: displayGlucoseValue(data.avg, unit), unit: unitText },
-          { label: '最高', value: displayGlucoseValue(data.max, unit), unit: unitText },
-          { label: '最低', value: displayGlucoseValue(data.min, unit), unit: unitText }
-        ],
-        bars,
-        hasBars: bars.length > 0
-      };
-    }
-    if (metric === 'bp') {
-      return {
-        summary: [
-          { label: '记录数', value: data.n || 0, unit: '次' },
-          { label: '平均收缩压', value: Math.round(data.avgSbp || 0), unit: 'mmHg' },
-          { label: '平均舒张压', value: Math.round(data.avgDbp || 0), unit: 'mmHg' },
-          { label: '达标率', value: Math.round((data.okRate || 0) * 100), unit: '%' }
-        ],
-        bars,
-        hasBars: bars.length > 0
-      };
-    }
-    if (metric === 'lipid') {
-      const latest = data.latest || {};
-      return {
-        summary: [
-          { label: '化验次数', value: data.n || 0, unit: '次' },
-          { label: 'TC', value: latest.tc || '—', unit: 'mmol/L' },
-          { label: 'TG', value: latest.tg || '—', unit: 'mmol/L' },
-          { label: 'LDL-C', value: latest.ldl || '—', unit: 'mmol/L' }
-        ],
-        bars,
-        hasBars: bars.length > 0
-      };
-    }
-    return {
-      summary: [
-        { label: '记录数', value: data.n || 0, unit: '次' },
-        { label: '最近一次', value: data.latest ? data.latest.value : '—', unit: 'μmol/L' },
-        { label: '平均', value: Math.round(data.avg || 0), unit: 'μmol/L' },
-        { label: '达标率', value: Math.round((data.okRate || 0) * 100), unit: '%' }
-      ],
-      bars,
-      hasBars: bars.length > 0
-    };
-  },
+  isDataFresh() { return !this.data.error && isPageFresh(this, this.cacheKey(), STATS_CACHE_DOMAINS, getToken()); },
 
-  safeFixed(value) {
-    return value == null ? '—' : Number(value).toFixed(1);
-  }
+  markDataFresh(key = this.cacheKey()) { markPageFresh(this, key, STATS_CACHE_DOMAINS, getToken()); },
+
+  openWeeklyReport() { wx.navigateTo({ url: '/pages/weekly-report/index' }); }
 });

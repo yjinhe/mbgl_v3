@@ -25,7 +25,7 @@ const mini = loadMiniMetrics();
 
 describe('mini-program metric rules match shared domain rules', () => {
   test('glucose status boundaries stay aligned', () => {
-    for (const [value, period] of [[3.8, 'fasting'], [3.9, 'fasting'], [7.0, 'fasting'], [7.1, 'fasting'], [10, 'after_lunch'], [16.8, 'after_lunch']] as const) {
+    for (const [value, period] of [[3.8, 'fasting'], [3.9, 'fasting'], [7.0, 'fasting'], [7.1, 'fasting'], [10, 'after_lunch'], [10.1, 'post_meal_1h'], [10.1, 'post_meal_2h'], [16.8, 'after_lunch']] as const) {
       expect(mini.glucoseStatus(value, period).key).toBe(glucoseStatus(value, period).key);
     }
   });

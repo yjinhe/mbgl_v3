@@ -44,7 +44,7 @@
           <text>{{streakMessage}}</text>
         </view>
 
-        <view class="home-section-title">今日总览</view>
+        <view class="home-section-title">最近记录总览</view>
         <view wx:if="{{allMetricsEmpty}}" class="overview-empty" data-metric="glucose" bindtap="goRecord">
           <view class="overview-empty-title">还没有记录</view>
           <view class="overview-empty-copy">点下方水滴按钮，记下第一条</view>
@@ -62,6 +62,7 @@
             </view>
             <text class="overview-name">{{item.name}}</text>
             <text class="overview-status">{{item.overviewStatusLabel}}</text>
+            <text wx:if="{{item.overviewDateText}}" class="overview-date">{{item.overviewDateText}}</text>
           </button>
         </view>
 
@@ -75,7 +76,8 @@
             <view class="read"><text class="v num">{{glucoseCard.valueText}}</text><text class="u">{{glucoseCard.unitText}}</text></view>
             <view class="meta"><text class="pill {{glucoseCard.statusClass}}">{{glucoseCard.statusLabel}}</text><text>{{glucoseCard.targetText}}</text></view>
             <view class="gauge"><view class="band" style="left:{{glucoseCard.bandLeft}};width:{{glucoseCard.bandWidth}}"></view><view class="dot {{glucoseCard.statusClass}}" style="left:{{glucoseCard.dotLeft}}"></view></view>
-            <view class="gx num"><text>2.0</text><text>10.0</text><text>20.0</text></view>
+            <view class="gx num"><text>{{glucoseCard.gaugeMinText}}</text><text>{{glucoseCard.gaugeMidText}}</text><text>{{glucoseCard.gaugeMaxText}}</text></view>
+            <view class="gauge-note">绿色区域为当前时段参考范围 · {{glucoseCard.unitText}}</view>
           </block>
         </view>
 
@@ -93,6 +95,7 @@
             <block wx:else>
               <view class="support-value num" style="{{item.statusStyle}}">{{item.valueText}}</view>
               <view class="support-unit">{{item.unit}}</view>
+              <view class="support-date">{{item.dateText}} {{item.timeText}}</view>
               <view class="support-foot">
                 <text wx:if="{{item.extraText}}" class="support-extra">{{item.extraText}}</text>
                 <text class="pill {{item.statusClass}}">{{item.statusLabel}}</text>

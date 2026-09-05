@@ -4,6 +4,11 @@ packages:
 
 overrides:
   form-data: ^4.0.6
+  "brace-expansion@^2.0.0": ^2.1.4
+  "nanoid@^3.0.0": ^3.3.18
+  "postcss@^8.0.0": ^8.5.23
+  "browserslist@^4.0.0": ^4.28.7
+  "qs@^6.0.0": ^6.16.0
 
 onlyBuiltDependencies:
   - "@prisma/client"

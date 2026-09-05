@@ -3,14 +3,15 @@
     <view class="safe-navbar" style="{{navStyle}}"><view class="title">历史记录</view></view>
     <view class="pages">
       <view class="page on">
-          <view wx:if="{{!authed}}" class="demo-banner">
+          <view wx:if="{{!authed && !loading && !error}}" class="demo-banner">
             <view class="demo-title">功能演示</view>
             <view class="demo-copy">这里展示演示记录。切换指标可浏览不同记录样式。</view>
           </view>
           <view class="msg">
             <button wx:for="{{metrics}}" wx:key="key" class="{{item.className}}" data-metric="{{item.key}}" bindtap="setMetric">{{item.name}}</button>
           </view>
-          <view wx:if="{{!hasRecords}}" class="empty">暂无记录</view>
+          <view wx:if="{{loading && !hasRecords}}" class="empty">正在加载记录…</view>
+          <view wx:elif="{{!hasRecords && !error}}" class="empty">暂无记录</view>
           <view wx:for="{{records}}" wx:key="id" class="rec card">
             <view class="bar" style="background:{{item.statusColorValue}}"></view>
             <view class="mid record-main">
@@ -19,9 +20,13 @@
               <view class="val num" style="{{item.statusStyle}}">{{item.readText}}</view>
               <view wx:if="{{item.hasNote}}" class="l2">备注：{{item.noteText}}</view>
             </view>
-            <button wx:if="{{authed}}" class="delete-mini" data-id="{{item.id}}" catchtap="remove">删除</button>
+            <view wx:if="{{authed}}" class="record-buttons">
+              <button class="edit-mini" data-id="{{item.id}}" catchtap="edit"><text>修改</text></button>
+              <button class="delete-mini" hover-class="delete-mini-pressed" data-id="{{item.id}}" catchtap="remove"><text>删除</text></button>
+            </view>
           </view>
-          <button wx:if="{{authed && nextCursor}}" class="btn line" loading="{{loading}}" bindtap="loadMore">加载更多</button>
+          <view wx:if="{{error}}" class="load-error"><view>{{error}}</view><button class="btn line" bindtap="retry">重新加载</button></view>
+          <button wx:if="{{authed && nextCursor && !error}}" class="btn line" loading="{{loading}}" disabled="{{loading}}" bindtap="loadMore">加载更多</button>
           <view class="foot-note">{{authed ? '删除后 7 天内可在回收站找回' : '演示记录不会上传或保存'}}</view>
       </view>
     </view>

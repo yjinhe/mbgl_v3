@@ -59,6 +59,19 @@ async function ensureDevSchemaUpgrades() {
   if (!userColumns.some((column) => column.name === 'authVersion')) {
     await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN "authVersion" INTEGER NOT NULL DEFAULT 0');
   }
+  if (!userColumns.some((column) => column.name === 'avatarUrl')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN "avatarUrl" TEXT');
+  }
+  if (!userColumns.some((column) => column.name === 'adminNote')) {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN "adminNote" TEXT NOT NULL DEFAULT ''`);
+  }
+  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "RecordSubmission" (
+    "id" TEXT NOT NULL PRIMARY KEY, "userId" TEXT NOT NULL, "key" TEXT NOT NULL,
+    "metric" TEXT NOT NULL, "requestHash" TEXT NOT NULL, "recordId" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`);
+  await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "RecordSubmission_userId_key_key" ON "RecordSubmission"("userId", "key")');
   await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "User_loginName_key" ON "User"("loginName")');
   await migrateLegacyDemoIdentity();
   await ensureDevWebAccount();

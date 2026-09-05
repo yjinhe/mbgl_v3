@@ -1,0 +1,18 @@
+.report-page { padding-bottom: calc(40rpx + env(safe-area-inset-bottom)); }
+.report-heading { font-size: 36rpx; line-height: 1.5; font-weight: 700; }
+.report-range { margin-top: 12rpx; font-size: 24rpx; color: var(--ink-2); }
+.report-tip { margin-top: 20rpx; padding: 20rpx; background: var(--brand-soft); border-radius: 12rpx; font-size: 26rpx; line-height: 1.6; }
+.page-controls { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; margin: 26rpx 0 18rpx; font-size: 28rpx; }
+.page-controls button { min-height: 96rpx; padding: 20rpx; color: var(--brand-deep); background: white; border: 1rpx solid var(--line); border-radius: 12rpx; font-size: 28rpx; }
+.page-controls button[disabled] { color: #9AA7A2; background: #EAEFEB; }
+.section-label { font-size: 28rpx; font-weight: 600; color: var(--brand-deep); margin-bottom: 18rpx; }
+.report-image { width: 100%; display: block; border: 1rpx solid var(--line); border-radius: 16rpx; }
+.report-actions { display: flex; gap: 16rpx; margin-top: 24rpx; }
+.report-actions .btn { flex: 1; min-height: 96rpx; padding: 20rpx 10rpx; font-size: 28rpx; }
+.report-actions .secondary { background: white; color: var(--brand-deep); border: 1rpx solid var(--brand); }
+.preview-button, .demo-login { min-height: 96rpx; font-size: 26rpx; color: var(--brand-deep); }
+.preview-button { width: 100%; }
+.demo-login { margin-top: 10rpx; text-align: left; }
+.state-card { padding: 32rpx; font-size: 28rpx; line-height: 1.6; }
+.state-card .btn { margin-top: 24rpx; }
+.report-canvas { position: fixed; left: -2000px; top: 0; pointer-events: none; }

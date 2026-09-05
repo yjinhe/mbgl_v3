@@ -1,35 +1,40 @@
 <view class="app-stage">
   <view class="screen">
     <view class="safe-navbar" style="{{navStyle}}"><view class="title">健康统计</view></view>
-    <view class="pages">
-      <view class="page on">
-          <view wx:if="{{!authed}}" class="demo-banner">
-            <view class="demo-title">功能演示</view>
-            <view class="demo-copy">以下为演示统计。可切换指标和时间范围体验功能。</view>
-          </view>
-          <view class="msg">
-            <button wx:for="{{metrics}}" wx:key="key" class="{{item.className}}" data-metric="{{item.key}}" bindtap="setMetric">{{item.name}}</button>
-          </view>
-          <view class="chiprow range-row">
-            <button class="chip {{range7Class}}" data-range="7" bindtap="setRange">7天</button>
-            <button class="chip {{range30Class}}" data-range="30" bindtap="setRange">30天</button>
-            <button class="chip {{range90Class}}" data-range="90" bindtap="setRange">90天</button>
-          </view>
-          <view class="mgrid">
-            <view wx:for="{{summary}}" wx:key="label" class="metric">
-              <view class="k">{{item.label}}</view>
-              <view class="v num">{{item.value}}<text class="unit">{{item.unit}}</text></view>
-            </view>
-          </view>
-          <view class="card trend-card">
-            <view class="card-h"><text class="t">趋势概览</text></view>
-            <view wx:if="{{!hasBars}}" class="empty">暂无趋势数据</view>
-            <view wx:else class="bars">
-              <view wx:for="{{bars}}" wx:key="id" class="bar-wrap"><view class="trend-bar" style="height:{{item.height}}rpx"></view></view>
-            </view>
-          </view>
-          <view class="foot-note">{{footnote}}</view>
-      </view>
-    </view>
+    <view class="pages"><view class="page on">
+      <view wx:if="{{!authed}}" class="demo-banner"><view class="demo-title">功能演示</view><view class="demo-copy">以下为演示统计，可切换指标、时段和时间范围。</view></view>
+      <view class="msg"><button wx:for="{{metrics}}" wx:key="key" class="{{item.className}}" data-metric="{{item.key}}" bindtap="setMetric">{{item.name}}</button></view>
+      <view class="chiprow range-row"><button class="chip {{range7Class}}" data-range="7" bindtap="setRange">7天</button><button class="chip {{range30Class}}" data-range="30" bindtap="setRange">30天</button><button class="chip {{range90Class}}" data-range="90" bindtap="setRange">90天</button></view>
+      <view wx:if="{{metric === 'glucose'}}" class="period-options"><button wx:for="{{periods}}" wx:key="key" class="filter-button {{item.className}}" data-period="{{item.key}}" bindtap="setPeriod"><text>{{item.name}}</text><text wx:if="{{item.key === 'post_meal_1h' || item.key === 'post_meal_2h'}}" class="filter-caption">{{item.description}}</text></button></view>
+      <view wx:if="{{metric === 'lipid'}}" class="period-options"><button wx:for="{{lipidOptions}}" wx:key="key" class="filter-button {{item.className}}" data-key="{{item.key}}" bindtap="setLipid">{{item.abbr}}</button></view>
+      <view wx:if="{{metric === 'glucose' && period === 'all'}}" class="explain-note">这里包含所有时段。看变化时，建议选择空腹、餐一或餐二，比较同一时段。</view>
+      <view wx:if="{{loading}}" class="empty">正在加载记录…</view>
+      <view wx:elif="{{error}}" class="card load-error"><view>{{error}}</view><button class="btn primary" bindtap="load">重新加载</button></view>
+      <block wx:else>
+        <view class="range-text">{{rangeText}} · 北京时间</view>
+        <view class="mgrid"><view wx:for="{{summary}}" wx:key="label" class="metric"><view class="k">{{item.label}}</view><view class="v num">{{item.value}}<text class="unit">{{item.unit}}</text></view></view></view>
+        <view class="card trend-card">
+          <view class="card-h"><text class="t">每天的变化</text></view><view class="chart-caption">{{chartCaption}} · {{chartUnit}}</view>
+          <view wx:if="{{!hasBars}}" class="empty">这个范围还没有对应数值</view>
+          <block wx:else>
+            <view class="chart-explain">每天多次记录取平均值；“—”表示当天未测。</view>
+            <view wx:if="{{metric === 'bp'}}" class="chart-legend"><text class="legend-primary">● 收缩压</text><text class="legend-secondary">● 舒张压</text></view>
+            <view class="chart-area"><view class="chart-axis"><text>{{chartMax}}</text><text>0</text></view><scroll-view scroll-x class="chart-scroll" enhanced show-scrollbar="{{true}}"><view class="bars"><view wx:for="{{bars}}" wx:key="id" class="bar-wrap">
+              <view class="bar-value num">{{item.valueText}}<text wx:if="{{metric === 'bp' && !item.missing}}" class="second-value">/{{item.secondText}}</text></view>
+              <view class="bar-column"><view wx:if="{{!item.missing}}" class="trend-bar" style="height:{{item.height}}rpx"></view><view wx:if="{{metric === 'bp' && !item.missing}}" class="trend-bar secondary-bar" style="height:{{item.secondHeight}}rpx"></view></view>
+              <view class="bar-date">{{item.dateText}}</view><view class="bar-count">{{item.count}}次</view>
+            </view></view></scroll-view></view>
+            <view class="chart-explain">左右滑动查看完整 {{range}} 天，下面可查看每次的真实数值。</view>
+          </block>
+        </view>
+        <view class="card detail-card"><view class="card-h"><text class="t">逐笔记录</text><text class="detail-count">共 {{totalCount}} 条</text></view>
+          <view wx:if="{{!totalCount}}" class="empty">暂无记录</view>
+          <view wx:for="{{visibleRows}}" wx:key="id" class="detail-row"><view class="detail-time">{{item.dateText}} {{item.timeText}}<text class="detail-period">{{item.periodText}}</text></view><view wx:for="{{item.lines}}" wx:for-item="line" wx:key="*this" class="detail-value num">{{line}}</view><view wx:if="{{item.unitText}}" class="detail-unit">{{item.unitText}}</view></view>
+          <button wx:if="{{hasMoreRows}}" class="more-button" bindtap="showMoreRows">继续查看 · 已显示 {{visibleCount}} / {{totalCount}} 条</button>
+        </view>
+      </block>
+      <button class="btn primary report-button" bindtap="openWeeklyReport">分享近7天记录给家人</button>
+      <view class="foot-note">{{footnote}}</view>
+    </view></view>
   </view>
 </view>

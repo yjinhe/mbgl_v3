@@ -8,9 +8,11 @@ const {
 } = require('../../utils/data-cache');
 const { loadMe, promptLoginForAction } = require('../../utils/page');
 const { demoMe } = require('../../utils/demo');
+const { newRecordRequestId, readRecordDrafts, writeRecordDrafts } = require('../../utils/record-draft');
 const { toDateInput, toIsoFromInputs, toTimeInput } = require('../../utils/format');
 const {
   consumeRecordMetric,
+  consumeRecordEdit,
   consumeRecordReturnPath,
   setRecordReturnPath,
   syncTabBar
@@ -45,12 +47,20 @@ const BP_RANGES = {
 };
 const LIPID_RANGE = { min: 0.1, max: 30 };
 const URIC_RANGE = { min: 50, max: 1500 };
+const PRECISE_POST_MEAL_PERIODS = {
+  post_meal_1h: { name: '餐一', detail: '餐后1小时' },
+  post_meal_2h: { name: '餐二', detail: '餐后2小时' }
+};
+const COMMON_GLUCOSE_PERIODS = ['fasting', 'post_meal_1h', 'post_meal_2h', 'random'];
 
 Page({
   data: {
     authed: false,
     loading: false,
     saving: false,
+    editingId: '',
+    showMorePeriods: false,
+    draftNotice: '',
     me: null,
     metrics: metrics.map((item) => Object.assign({}, item, { active: item.key === 'glucose', className: item.key === 'glucose' ? 'on' : '' })),
     metric: 'glucose',
@@ -114,11 +124,22 @@ Page({
 
   onLoad() {
     this._metricDrafts = Object.create(null);
+    this._sessionToken = getToken();
     this.setData({ navStyle: getApp().globalData.navStyle });
   },
 
   async onShow() {
     syncTabBar(this);
+    const token = getToken();
+    if (this._sessionToken !== token) {
+      this._sessionToken = token;
+      this._metricDrafts = Object.create(null);
+      this._draftOwner = '';
+      this._activeMetric = '';
+      this._formInitialized = false;
+      this.setData({ authed: false, me: null, editingId: '', draftNotice: '' });
+    }
+    const edit = consumeRecordEdit(token);
     const selected = consumeRecordMetric();
     if (!this._formInitialized || selected) {
       this._formInitialized = true;
@@ -126,11 +147,17 @@ Page({
     } else if (!this.hasDraft()) {
       this.refreshEmptyDraftTime();
     }
-    if (this.isProfileFresh()) return;
+    if (this.isProfileFresh()) {
+      if (edit) this.beginEdit(edit);
+      return;
+    }
 
     const lease = captureDataLease(getToken(), RECORD_CACHE_DOMAINS);
     const me = await loadMe(this, { apply: false });
-    if (me === false || !isDataLeaseCurrent(lease, getToken())) return;
+    if (me === false || !isDataLeaseCurrent(lease, getToken())) {
+      if (edit) wx.switchTab({ url: '/pages/history/index' });
+      return;
+    }
     const nextMe = me || demoMe;
     const nextUnitText = this.unitTextFor(this.data.metric, nextMe);
     const unitChangedWithValue = this.data.metric === 'glucose'
@@ -145,10 +172,31 @@ Page({
       value: unitChangedWithValue ? '' : this.data.value
     }, decimalPatch), () => this.updateLive());
     if (unitChangedWithValue) this.showToast('血糖单位已更新，请重新输入');
+    const ownerId = me && me.id;
+    if (ownerId && this._draftOwner !== ownerId) {
+      this._draftOwner = ownerId;
+      const restored = readRecordDrafts(ownerId);
+      this._metricDrafts = Object.assign(Object.create(null), restored, this._metricDrafts);
+      if (!this.hasDraft() && this._metricDrafts[this.data.metric]) {
+        this.setMetricValue(this.data.metric);
+        this.setData({ draftNotice: '已恢复上次未保存的内容' });
+      }
+    }
     this.markProfileFresh();
+    if (edit) this.beginEdit(edit);
+  },
+
+  onHide() {
+    this.persistDraft();
+  },
+
+  onUnload() {
+    this.persistDraft();
+    clearTimeout(this.toastTimer);
   },
 
   setMetric(event) {
+    if (this.data.editingId || this.data.saving) return;
     this.setMetricValue(event.currentTarget.dataset.metric);
   },
 
@@ -157,12 +205,12 @@ Page({
     const metricExists = metrics.some((item) => item.key === metric);
     if (!metricExists) metric = 'glucose';
     const previousMetric = this._activeMetric;
-    if (previousMetric && previousMetric !== metric && !options.reset) {
+    if (previousMetric && previousMetric !== metric && !options.reset && !this.data.editingId) {
       this.captureMetricDraft(previousMetric);
     }
     if (options.reset) delete this._metricDrafts[metric];
 
-    const draft = this._metricDrafts[metric] || this.emptyMetricDraft(metric);
+    const draft = options.draft || this._metricDrafts[metric] || this.emptyMetricDraft(metric);
     const unitText = this.unitTextFor(metric);
     const unitChangedWithValue = metric === 'glucose'
       && Boolean(draft.value)
@@ -174,6 +222,8 @@ Page({
     const period = draft.period || recommendedPeriod;
     const periodIsRecommended = period === recommendedPeriod;
     this._activeMetric = metric;
+    this._requestFingerprint = draft.requestFingerprint || '';
+    this._clientRequestId = draft.clientRequestId || '';
 
     this.setData(Object.assign({
       metric,
@@ -206,6 +256,7 @@ Page({
       fastingClass: draft.fasting ? 'on' : '',
       lipidFastingClass: draft.lipid.fasting ? 'on' : '',
       note: draft.note,
+      showMorePeriods: false,
       measurementTimeValid: this.isMeasurementTimeValid(draft.dateValue, draft.timeValue),
       measurementTimeError: this.measurementTimeError(draft.dateValue, draft.timeValue),
       maxDateValue: toDateInput(),
@@ -253,8 +304,59 @@ Page({
       lipid: Object.assign({}, this.data.lipid),
       fasting: this.data.fasting,
       note: this.data.note,
-      glucoseUnit: metric === 'glucose' ? this.data.unitText : undefined
+      glucoseUnit: metric === 'glucose' ? this.data.unitText : undefined,
+      clientRequestId: this._clientRequestId || '',
+      requestFingerprint: this._requestFingerprint || ''
     };
+  },
+
+  persistDraft() {
+    if (this.data.editingId || !this.data.authed || !this._draftOwner || this._sessionToken !== getToken()) return;
+    if (this.hasDraft()) this.captureMetricDraft(this.data.metric);
+    else delete this._metricDrafts[this.data.metric];
+    const saved = writeRecordDrafts(this._draftOwner, this._metricDrafts);
+    if (!saved && this.hasDraft()) this.setData({ draftNotice: '本机保存暂不可用，请保持页面打开后重试' });
+  },
+
+  beginEdit(intent) {
+    if (!this.data.authed || !intent || intent.token !== getToken()) return;
+    const metric = intent.metric;
+    if (!metrics.some((item) => item.key === metric)) return;
+    this.persistDraft();
+    const record = intent.record;
+    const measuredAt = new Date(record.measuredAt);
+    if (Number.isNaN(measuredAt.getTime())) return;
+    const draft = this.emptyMetricDraft(metric, measuredAt);
+    draft.period = record.period || draft.period;
+    draft.periodWasManuallySelected = true;
+    draft.note = record.note || '';
+    draft.tags = Array.isArray(record.tags) ? record.tags.slice() : [];
+    if (metric === 'glucose') {
+      const value = this.data.me && this.data.me.unit === 'mgdl'
+        ? Math.round(Number(record.valueMmol) * 18)
+        : Number(Number(record.valueMmol).toFixed(1));
+      draft.value = String(value);
+    } else if (metric === 'bp') {
+      for (const key of ['sbp', 'dbp', 'pulse']) draft[key] = record[key] == null ? '' : String(record[key]);
+    } else if (metric === 'lipid') {
+      for (const key of ['tc', 'tg', 'ldl', 'hdl']) draft.lipid[key] = record[key] == null ? '' : String(record[key]);
+      draft.lipid.fasting = record.fasting !== false;
+    } else {
+      draft.value = String(record.value);
+      draft.fasting = record.fasting !== false;
+    }
+    this.setData({ editingId: record.id, draftNotice: '正在修改已有记录，保存后会替换原内容' });
+    this.setMetricValue(metric, { draft });
+  },
+
+  finishEditing() {
+    this.setData({ editingId: '', draftNotice: '' });
+    this._activeMetric = '';
+    this.setMetricValue(this.data.metric);
+  },
+
+  toggleMorePeriods() {
+    this.setData({ showMorePeriods: !this.data.showMorePeriods });
   },
 
   inferPeriod(metric, date) {
@@ -263,12 +365,18 @@ Page({
   },
 
   periodOptions(options, period) {
-    return options.map((key) => ({
-      key,
-      name: periodNames[key],
-      active: key === period,
-      className: key === period ? 'on' : ''
-    }));
+    return options.map((key) => {
+      const precise = PRECISE_POST_MEAL_PERIODS[key];
+      return {
+        key,
+        name: precise ? precise.name : periodNames[key],
+        detail: precise ? precise.detail : '',
+        ariaLabel: precise ? `${precise.name}，${precise.detail}` : periodNames[key],
+        common: COMMON_GLUCOSE_PERIODS.includes(key),
+        active: key === period,
+        className: key === period ? 'on' : ''
+      };
+    });
   },
 
   periodHintText(period, recommendedPeriod, wasManuallySelected) {
@@ -324,15 +432,16 @@ Page({
     const measuredAt = this.measurementDate();
     const recommendedPeriod = this.inferPeriod(this.data.metric, measuredAt);
     const measurementTimeError = this.measurementTimeError();
+    const manual = this.data.periodWasManuallySelected;
+    const period = manual ? this.data.period : recommendedPeriod;
     this.setData({
-      period: recommendedPeriod,
+      period,
       recommendedPeriod,
-      periodIsRecommended: true,
-      periodRecommended: true,
-      periodWasManuallySelected: false,
-      periodHintText: '已按测量时间推荐',
-      glucosePeriods: this.periodOptions(glucosePeriods, recommendedPeriod),
-      bpPeriods: this.periodOptions(bpPeriods, recommendedPeriod),
+      periodIsRecommended: period === recommendedPeriod,
+      periodRecommended: period === recommendedPeriod,
+      periodHintText: this.periodHintText(period, recommendedPeriod, manual),
+      glucosePeriods: this.periodOptions(glucosePeriods, period),
+      bpPeriods: this.periodOptions(bpPeriods, period),
       measurementTimeValid: !measurementTimeError,
       measurementTimeError,
       maxDateValue: toDateInput(),
@@ -456,6 +565,7 @@ Page({
   },
 
   hasDraft() {
+    if (this.data.periodWasManuallySelected) return true;
     if (this.data.note || this.data.tags.length) return true;
     if (this.data.metric === 'bp') return Boolean(this.data.sbp || this.data.dbp || this.data.pulse);
     if (this.data.metric === 'lipid') {
@@ -487,6 +597,7 @@ Page({
   },
 
   onInput(event) {
+    if (this.data.saving) return;
     const key = event.currentTarget.dataset.key;
     this.setData({ [key]: event.detail.value }, () => {
       if (key === 'dateValue' || key === 'timeValue') {
@@ -498,6 +609,7 @@ Page({
   },
 
   pressKey(event) {
+    if (this.data.saving) return;
     const key = event.currentTarget.dataset.key;
     const metric = this.data.metric;
     if (metric === 'bp') {
@@ -580,6 +692,7 @@ Page({
   },
 
   onLipidInput(event) {
+    if (this.data.saving) return;
     const key = event.currentTarget.dataset.key;
     this.setData({ [`lipid.${key}`]: event.detail.value }, () => {
       this.updateLipidItems();
@@ -588,6 +701,7 @@ Page({
   },
 
   setPeriod(event) {
+    if (this.data.saving) return;
     const period = event.currentTarget.dataset.period;
     const periodRecommended = period === this.data.recommendedPeriod;
     this.setData({
@@ -602,6 +716,7 @@ Page({
   },
 
   toggleTag(event) {
+    if (this.data.saving) return;
     const tag = event.currentTarget.dataset.tag;
     const tags = this.data.tags.includes(tag)
       ? this.data.tags.filter((item) => item !== tag)
@@ -610,17 +725,19 @@ Page({
       tags,
       glucoseTags: glucoseTags.map((name) => ({ name, active: tags.includes(name), className: tags.includes(name) ? 'on' : '' })),
       bpTags: bpTags.map((name) => ({ name, active: tags.includes(name), className: tags.includes(name) ? 'on' : '' }))
-    });
+    }, () => this.persistDraft());
   },
 
   toggleFasting() {
+    if (this.data.saving) return;
     const fasting = !this.data.fasting;
-    this.setData({ fasting, fastingClass: fasting ? 'on' : '' });
+    this.setData({ fasting, fastingClass: fasting ? 'on' : '' }, () => this.persistDraft());
   },
 
   toggleLipidFasting() {
+    if (this.data.saving) return;
     const fasting = !this.data.lipid.fasting;
-    this.setData({ 'lipid.fasting': fasting, lipidFastingClass: fasting ? 'on' : '' });
+    this.setData({ 'lipid.fasting': fasting, lipidFastingClass: fasting ? 'on' : '' }, () => this.persistDraft());
   },
 
   updateLipidItems() {
@@ -697,10 +814,12 @@ Page({
         style: `color:${status ? statusColor[status.key] : '#7A8A85'}`
       }
     });
+    this.persistDraft();
   },
 
   async save() {
     if (this.data.saving) return;
+    const saveToken = getToken();
     try {
       this.setData({ saving: true });
       const metric = this.data.metric;
@@ -741,21 +860,41 @@ Page({
         data = Object.assign(data, { value: validation.value, fasting: this.data.fasting });
       }
       if (!this.data.authed) {
-        promptLoginForAction({ metric, data });
+        promptLoginForAction({ metric, data, clientRequestId: this.requestIdFor(metric, data) });
         return;
       }
       const lease = captureDataLease(getToken(), []);
-      const result = await request(`/api/app/records/${metric}`, { method: 'POST', data });
+      const editingId = this.data.editingId;
+      const options = editingId
+        ? { method: 'PATCH', data }
+        : { method: 'POST', data, header: { 'Idempotency-Key': this.requestIdFor(metric, data) } };
+      this.persistDraft();
+      const result = await request(`/api/app/records/${metric}${editingId ? '/' + encodeURIComponent(editingId) : ''}`, options);
       if (!isDataLeaseCurrent(lease, getToken())) return;
       markRecordsChanged();
       const presentation = this.savedRecordPresentation(metric, data, result && result.record);
-      this.setMetricValue(metric, { reset: true });
-      this.showSaveSuccess(presentation, result && result.safetyAlert);
+      if (editingId) this.finishEditing();
+      else {
+        this.setMetricValue(metric, { reset: true });
+        this.setData({ draftNotice: '' });
+        this.persistDraft();
+      }
+      this.showSaveSuccess(presentation, result && result.safetyAlert, Boolean(editingId));
     } catch (error) {
+      if (saveToken !== getToken()) return;
       this.showToast(error.message || '保存失败');
     } finally {
       this.setData({ saving: false });
     }
+  },
+
+  requestIdFor(metric, data) {
+    const fingerprint = JSON.stringify({ metric, data });
+    if (!this._clientRequestId || fingerprint !== this._requestFingerprint) {
+      this._clientRequestId = newRecordRequestId();
+      this._requestFingerprint = fingerprint;
+    }
+    return this._clientRequestId;
   },
 
   savedRecordPresentation(metric, data, savedRecord) {
@@ -789,11 +928,12 @@ Page({
     return `\n\n本次数值${status}，请核对录入是否正确；如有不适，请及时咨询专业医疗机构。`;
   },
 
-  showSaveSuccess(presentation, safetyAlert) {
+  showSaveSuccess(presentation, safetyAlert, edited = false) {
     wx.showModal({
-      title: safetyAlert ? '记录已保存，请留意' : '记录已保存',
+      title: edited ? '记录已修改' : (safetyAlert ? '记录已保存，请留意' : '记录已保存'),
       content: `${presentation.summary}\n记录时间：${presentation.timeText}${this.safetyNotice(safetyAlert)}`,
       cancelText: '再记一笔',
+      showCancel: !edited,
       confirmText: '完成返回',
       success: (result) => {
         if (result.confirm) this.closeSheet();
@@ -809,6 +949,23 @@ Page({
   },
 
   closeSheet() {
+    if (this.data.saving) return;
+    if (this.data.editingId) {
+      wx.showModal({
+        title: '退出修改？',
+        content: '尚未保存的修改会放弃，原记录保持不变。',
+        confirmText: '退出修改',
+        cancelText: '继续修改',
+        success: (result) => {
+          if (result.confirm) {
+            this.finishEditing();
+            this.closeSheet();
+          }
+        }
+      });
+      return;
+    }
+    this.persistDraft();
     const returnPath = consumeRecordReturnPath('/pages/home/index');
     wx.switchTab({
       url: returnPath,

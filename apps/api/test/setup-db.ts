@@ -13,6 +13,7 @@ export async function createSqliteSchema(prisma: PrismaClient) {
       "passwordHash" TEXT,
       "authVersion" INTEGER NOT NULL DEFAULT 0,
       "nickname" TEXT NOT NULL DEFAULT '微信用户',
+      "adminNote" TEXT NOT NULL DEFAULT '',
       "avatarUrl" TEXT,
       "sex" TEXT,
       "unit" TEXT NOT NULL DEFAULT 'mmol',
@@ -23,6 +24,17 @@ export async function createSqliteSchema(prisma: PrismaClient) {
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE UNIQUE INDEX "User_loginName_key" ON "User"("loginName")`,
+    `CREATE TABLE "RecordSubmission" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "key" TEXT NOT NULL,
+      "metric" TEXT NOT NULL,
+      "requestHash" TEXT NOT NULL,
+      "recordId" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+    )`,
+    `CREATE UNIQUE INDEX "RecordSubmission_userId_key_key" ON "RecordSubmission"("userId", "key")`,
     `CREATE TABLE "GlucoseRecord" (
       "id" TEXT NOT NULL PRIMARY KEY,
       "userId" TEXT NOT NULL,

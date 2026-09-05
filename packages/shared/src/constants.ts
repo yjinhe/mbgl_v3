@@ -12,6 +12,8 @@ export const GLUCOSE_PERIODS: Array<{
   type: 'fast' | 'post';
 }> = [
   { key: 'fasting', name: '空腹', type: 'fast' },
+  { key: 'post_meal_1h', name: '餐后1小时', type: 'post' },
+  { key: 'post_meal_2h', name: '餐后2小时', type: 'post' },
   { key: 'after_breakfast', name: '早餐后', type: 'post' },
   { key: 'before_lunch', name: '午餐前', type: 'fast' },
   { key: 'after_lunch', name: '午餐后', type: 'post' },

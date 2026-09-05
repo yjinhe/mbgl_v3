@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import QRCode from 'qrcode';
+import { AdminUsers } from './admin-users';
 import './styles.css';
 
 const API = import.meta.env.VITE_API_BASE || '';
-type View = 'dash' | 'customers' | 'detail' | 'alerts' | 'invites' | 'staff' | 'settings' | 'adminStats' | 'adminPharmacies';
+type View = 'dash' | 'customers' | 'detail' | 'alerts' | 'invites' | 'staff' | 'settings' | 'adminStats' | 'adminPharmacies' | 'adminUsers';
 
 function isStrongPassword(password: string) {
   return password.length >= 12 && password.length <= 128 && /[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
@@ -33,7 +34,7 @@ async function api(path: string, init: RequestInit = {}) {
 
 function App() {
   const [logged, setLogged] = useState(Boolean(token()));
-  const [view, setView] = useState<View>(aud() === 'admin' ? 'adminStats' : 'dash');
+  const [view, setView] = useState<View>(aud() === 'admin' ? 'adminUsers' : 'dash');
   const [staff, setStaff] = useState<any>(JSON.parse(localStorage.getItem('tangji_console_staff') || 'null'));
   const [pharmacy, setPharmacy] = useState<any>(JSON.parse(localStorage.getItem('tangji_console_pharmacy') || 'null'));
   const [toast, setToast] = useState('');
@@ -80,7 +81,7 @@ function App() {
     } else {
       setStaff({ name: '平台管理员', role: 'admin' });
       setPharmacy({ name: '平台后台' });
-      setView('adminStats');
+      setView('adminUsers');
     }
     setSessionReady(false);
     setLogged(true);
@@ -97,7 +98,7 @@ function App() {
         <aside className="bside">
           <div className="blogo">💧 糖迹 · {isAdmin ? '平台后台' : '药房工作台'}</div>
           <nav className="bmenu">
-            {(isAdmin ? [['adminStats','平台概览'],['adminPharmacies','药房管理']] : [['dash','工作台'],['customers','客户管理'],['alerts','预警中心'],['invites','邀请管理'], ...(staff?.role === 'owner' ? [['staff','员工管理']] : []), ['settings','药房设置']] as any).map(([k, n]: any) => <button key={k} className={view === k || (k === 'customers' && view === 'detail') ? 'on' : ''} onClick={() => setView(k)}>{n}</button>)}
+            {(isAdmin ? [['adminStats','平台概览'],['adminUsers','用户与记录'],['adminPharmacies','药房管理']] : [['dash','工作台'],['customers','客户管理'],['alerts','预警中心'],['invites','邀请管理'], ...(staff?.role === 'owner' ? [['staff','员工管理']] : []), ['settings','药房设置']] as any).map(([k, n]: any) => <button key={k} className={view === k || (k === 'customers' && view === 'detail') ? 'on' : ''} onClick={() => setView(k)}>{n}</button>)}
           </nav>
           <div className="bme"><div className="bn">{staff?.name}</div><div className="br">{staff?.role === 'owner' ? '店长' : staff?.role === 'admin' ? '平台管理员' : '店员'} · {pharmacy?.name}</div><div className="bme-actions"><button onClick={() => setPasswordOpen(true)}>修改密码</button><button onClick={() => { clearConsoleSession(); setLoginNotice(''); setSessionReady(false); setLogged(false); }}>退出登录</button></div></div>
         </aside>
@@ -119,7 +120,7 @@ function App() {
 }
 
 function title(view: View) {
-  return ({ dash: '工作台', customers: '客户管理', detail: '客户详情', alerts: '预警中心', invites: '邀请管理', staff: '员工管理', settings: '药房设置', adminStats: '平台概览', adminPharmacies: '药房管理' } as Record<View, string>)[view];
+  return ({ dash: '工作台', customers: '客户管理', detail: '客户详情', alerts: '预警中心', invites: '邀请管理', staff: '员工管理', settings: '药房设置', adminStats: '平台概览', adminPharmacies: '药房管理', adminUsers: '用户与记录' } as Record<View, string>)[view];
 }
 
 function Login({ onLogin, notice }: any) {
@@ -202,6 +203,7 @@ function Router({ view, setView, showToast, setPharmacy }: any) {
   if (view === 'staff') return <Staff showToast={showToast} />;
   if (view === 'settings') return <Settings showToast={showToast} setPharmacy={setPharmacy} />;
   if (view === 'adminStats') return <AdminStats />;
+  if (view === 'adminUsers') return <AdminUsers api={api} showToast={showToast} />;
   return <AdminPharmacies showToast={showToast} />;
 }
 
@@ -367,7 +369,7 @@ function Settings({ showToast, setPharmacy }: any) {
 function AdminStats() {
   const [data, setData] = useState<any>(null);
   useEffect(() => { api('/api/admin/stats').then(setData); }, []);
-  return <div className="bstats">{data && [['药房总数', data.pharmacyTotal], ['客户总数', data.customerTotal], ['今日记录数', data.recordsToday]].map(([k,v]) => <div className="bstat" key={k as string}><div className="k">{k}</div><div className="v num">{v as any}</div></div>)}</div>;
+  return <div className="bstats">{data && [['药房总数', data.pharmacyTotal], ['药房绑定客户数', data.customerTotal], ['今日测量记录数', data.recordsToday]].map(([k,v]) => <div className="bstat" key={k as string}><div className="k">{k}</div><div className="v num">{v as any}</div></div>)}</div>;
 }
 
 function secureInitialPassword() {

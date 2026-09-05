@@ -147,6 +147,31 @@
   letter-spacing: 0;
 }
 
+.home-page .hero .lab,
+.home-page .hero .meta {
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.overview-date {
+  font-size: 23rpx;
+  line-height: 1.4;
+  color: var(--ink-3);
+  margin-top: 8rpx;
+}
+
+.support-date,
+.gauge-note {
+  margin-top: 12rpx;
+  font-size: 23rpx;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+.gauge-note {
+  color: #9FC9BB;
+}
+
 .home-page .hero .gauge .dot.ok {
   background: var(--ok);
 }

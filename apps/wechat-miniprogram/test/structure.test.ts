@@ -24,6 +24,7 @@ describe('wechat miniprogram structure', () => {
       'pages/stats/index',
       'pages/mine/index',
       'pages/recycle/index',
+      'pages/weekly-report/index',
       'pages/legal/privacy/index',
       'pages/legal/terms/index'
     ]);
@@ -142,7 +143,7 @@ describe('wechat miniprogram structure', () => {
     expect(homeJs).toContain("status.key === 'ok' ? '达标'");
     expect(homeJs).toContain('cards.every((card) => card.empty)');
     expect(homeJs).toContain('cards.filter((card) => card.isBp || card.isUric)');
-    expect(homeWxml).toContain('今日总览');
+    expect(homeWxml).toContain('最近记录总览');
     expect(homeWxml).toContain('overview-grid');
     expect(homeWxml).toContain('overview-empty');
     expect(homeWxml).toContain('streakMessage');
@@ -251,7 +252,7 @@ describe('wechat miniprogram structure', () => {
     expect(demoJs).toContain('demoRecords');
     expect(demoJs).toContain('demoStats');
     expect(recordJs).not.toContain('wx.reLaunch');
-    expect(recordJs).toContain('promptLoginForAction({ metric, data })');
+    expect(recordJs).toContain('promptLoginForAction({ metric, data, clientRequestId:');
     expect(pageJs).toContain("cancelText: '继续体验'");
     expect(pageJs).toContain("confirmText: '去登录并保存'");
     expect(pageJs).toContain('tangji_pending_record');

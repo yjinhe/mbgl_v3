@@ -30,6 +30,8 @@ docker/release.sh v1.0.0
 
 生产必须设置强随机 `JWT_SECRET` 以及准确的 `APP_ORIGIN/WEB_ORIGIN`。账号密码是 Web 主登录通道，不依赖微信配置。API 经一层受信任代理时保持 `TRUST_PROXY_HOPS=1`，并保持以下开关关闭：
 
+代理信任同时校验跳数与地址：仅接受回环地址、RFC1918 私有 IPv4 和私有 IPv6 网段。保持 API 宿主机端口绑定 `127.0.0.1`、前端与 API 使用隔离 Docker 网络；不要把 API 直接开放给公网或不受信任的内网客户端。使用公网地址代理的其它拓扑需先显式调整信任策略，不能仅增加跳数。
+
 ```env
 APP_ORIGIN=https://app.example.com
 WEB_ORIGIN=https://app.example.com,https://console.example.com

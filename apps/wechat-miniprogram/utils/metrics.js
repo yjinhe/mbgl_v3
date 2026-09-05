@@ -7,6 +7,8 @@ const metrics = [
 
 const periodNames = {
   fasting: '空腹',
+  post_meal_1h: '餐后1小时',
+  post_meal_2h: '餐后2小时',
   after_breakfast: '早餐后',
   before_lunch: '午餐前',
   after_lunch: '午餐后',
@@ -21,7 +23,7 @@ const periodNames = {
   night: '夜间'
 };
 
-const glucosePeriods = ['fasting', 'after_breakfast', 'before_lunch', 'after_lunch', 'before_dinner', 'after_dinner', 'bedtime', 'dawn', 'random'];
+const glucosePeriods = ['fasting', 'post_meal_1h', 'post_meal_2h', 'after_breakfast', 'before_lunch', 'after_lunch', 'before_dinner', 'after_dinner', 'bedtime', 'dawn', 'random'];
 const bpPeriods = ['morning', 'daytime', 'evening', 'night'];
 const glucoseTags = ['运动后', '聚餐', '加餐', '感冒', '熬夜', '情绪波动'];
 const bpTags = ['运动后', '情绪波动', '休息后'];

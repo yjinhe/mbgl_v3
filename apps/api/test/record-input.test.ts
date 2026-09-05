@@ -71,6 +71,8 @@ describe('strict metric field validation', () => {
   test('keeps valid inputs for all four metrics', () => {
     const measuredAt = '2026-07-12T10:00:00+08:00';
     expect(validateMetricInput('glucose', { value: 6.1, unit: 'mmol', period: 'fasting', tags: ['空腹'], note: '', measuredAt }).ok).toBe(true);
+    expect(validateMetricInput('glucose', { value: 8.1, unit: 'mmol', period: 'post_meal_1h', measuredAt }).ok).toBe(true);
+    expect(validateMetricInput('glucose', { value: 7.6, unit: 'mmol', period: 'post_meal_2h', measuredAt }).ok).toBe(true);
     expect(validateMetricInput('bp', { sbp: 120, dbp: 80, pulse: 70, period: 'morning', tags: [], measuredAt }).ok).toBe(true);
     expect(validateMetricInput('lipid', { tc: 4.5, fasting: true, measuredAt }).ok).toBe(true);
     expect(validateMetricInput('uric', { value: 420, fasting: true, measuredAt }).ok).toBe(true);

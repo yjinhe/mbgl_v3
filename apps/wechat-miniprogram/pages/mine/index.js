@@ -166,6 +166,10 @@ Page({
     wx.navigateTo({ url: '/pages/recycle/index' });
   },
 
+  goWeeklyReport() {
+    wx.navigateTo({ url: '/pages/weekly-report/index' });
+  },
+
   goTerms() {
     wx.navigateTo({ url: '/pages/legal/terms/index' });
   },

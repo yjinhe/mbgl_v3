@@ -6,6 +6,7 @@
     "pages/stats/index",
     "pages/mine/index",
     "pages/recycle/index",
+    "pages/weekly-report/index",
     "pages/legal/privacy/index",
     "pages/legal/terms/index"
   ],

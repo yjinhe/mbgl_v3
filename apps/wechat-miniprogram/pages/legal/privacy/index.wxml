@@ -6,7 +6,7 @@
     </view>
     <view class="pages">
       <view class="page legal-page">
-        <view class="legal-meta">更新及生效日期：2026 年 7 月 27 日</view>
+        <view class="legal-meta">更新及生效日期：2026 年 9 月 5 日</view>
 
         <view class="legal-title">糖迹隐私政策</view>
         <view class="legal-paragraph">糖迹是一款供个人记录和查看健康数据的工具。运营者为本小程序资料页公示的主体，联系渠道为资料页所示的开发者联系方式。</view>
@@ -15,16 +15,18 @@
         <view class="legal-paragraph">为了完成微信登录，我们会处理微信提供的账号标识，用于识别您的糖迹账号，不获取您的微信密码。</view>
         <view class="legal-paragraph">当您主动选择头像或填写称呼时，我们会处理您确认的头像和昵称，仅用于个人资料展示。头像和昵称均为可选信息，不影响记录、查看和统计功能。</view>
         <view class="legal-paragraph">当您主动使用记录功能时，我们会处理您填写的性别、血糖、血压、血脂、尿酸、测量时间、标签和备注。这些健康数据属于敏感个人信息，仅在您主动填写并明确同意后处理。</view>
-        <view class="legal-paragraph">本小程序不申请手机号、通讯录、位置、相册、摄像头或麦克风权限。</view>
+        <view class="legal-paragraph">当您主动点击“保存到相册”时，我们会申请相册写入权限，仅用于将您生成的健康记录图片保存到手机，不读取相册内容。拒绝该权限不影响记录、查看、预览图片或主动转发。本小程序不申请手机号、通讯录、位置、摄像头或麦克风权限。</view>
 
         <view class="legal-heading">二、处理目的和方式</view>
         <view class="legal-paragraph">上述信息仅用于账号登录、保存和展示您的记录、生成个人统计、恢复误删记录、导出数据以及保障服务稳定。我们不会利用健康数据进行广告推荐或自动化决策。</view>
 
         <view class="legal-heading">三、存储和保护</view>
         <view class="legal-paragraph">数据存储在中国境内的服务器中，并通过访问控制、加密传输和身份校验进行保护。账号存续期间会保留您主动保存的数据；回收站中的记录保留 7 天。您注销账号后，账号及关联记录将被删除，法律法规另有要求的除外。</view>
+        <view class="legal-paragraph">为避免网络中断导致重新填写，已登录用户的未保存内容会按账号缓存在当前手机。草稿在 7 天内可恢复，过期后会在下次读取时清理；保存成功、退出登录或切换账号时会清理相应草稿。记录图片在手机本地生成，您主动保存到相册的图片可自行在相册删除。</view>
 
         <view class="legal-heading">四、共享和对外提供</view>
         <view class="legal-paragraph">我们不出售您的个人信息。除提供服务器和网络服务所必需、依法配合有权机关，或另行取得您的明确同意外，不向第三方提供您的个人信息。受托服务提供方只能按我们的指示处理必要信息。</view>
+        <view class="legal-paragraph">“给家人看”仅在您主动选择转发时，通过微信分享您确认的记录图片，接收人由您自行选择；小程序不会自动向家人或其他人发送您的记录。</view>
 
         <view class="legal-heading">五、您的权利</view>
         <view class="legal-paragraph">您可以在“我的”中查看和修改个人设置、导出全部记录、恢复或删除回收站记录、退出登录，也可以使用“注销账号”永久删除账号和关联数据。</view>

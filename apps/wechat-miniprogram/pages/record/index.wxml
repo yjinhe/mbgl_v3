@@ -1,7 +1,7 @@
 <view class="app-stage">
   <view class="screen">
     <view class="safe-navbar" style="{{navStyle}}">
-      <view class="title">记一笔</view>
+      <view class="title">{{editingId ? '修改记录' : '记一笔'}}</view>
     </view>
 
     <view class="pages">
@@ -12,14 +12,15 @@
 
     <view class="mask {{maskOn}}" bindtap="closeSheet"></view>
     <view class="sheet {{sheetOn}}">
-      <view class="sheet-h"><text class="t">记一笔</text><button class="x" aria-label="关闭录入" bindtap="closeSheet">×</button></view>
+      <view class="sheet-h"><text class="t">{{editingId ? '修改记录' : '记一笔'}}</text><button class="x" disabled="{{saving}}" aria-label="关闭录入" bindtap="closeSheet">×</button></view>
       <view class="sheet-body">
+        <view wx:if="{{draftNotice}}" class="draft-notice">{{draftNotice}}</view>
         <view wx:if="{{!authed}}" class="demo-banner compact-demo">
           <view class="demo-title">功能演示</view>
           <view class="demo-copy">可先完整体验，演示内容不会上传；保存时再选择是否登录。</view>
         </view>
         <view class="msg" aria-label="选择记录类型">
-          <button wx:for="{{metrics}}" wx:key="key" class="{{item.className}}" data-metric="{{item.key}}" aria-label="记录{{item.name}}" bindtap="setMetric">{{item.name}}</button>
+          <button wx:for="{{metrics}}" wx:key="key" disabled="{{saving || (editingId && !item.active)}}" class="{{item.className}}" data-metric="{{item.key}}" aria-label="记录{{item.name}}" bindtap="setMetric">{{item.name}}</button>
         </view>
         <view class="time-row">
           <picker class="time-picker" mode="date" value="{{dateValue}}" end="{{dateMax}}" aria-label="测量日期" bindchange="onInput" data-key="dateValue"><view class="time-cell"><text class="time-label">日期</text><text class="time-value">{{dateValue}}</text><text class="time-arrow">›</text></view></picker>
@@ -57,7 +58,8 @@
           <view class="live-status" style="{{live.style}}">{{live.text}}</view>
           <block wx:if="{{isGlucose}}">
             <view class="f-label">测量时段 <text class="hint">{{periodHintText}}</text></view>
-            <view class="pgrid"><button wx:for="{{glucosePeriods}}" wx:key="key" class="chip {{item.className}}" data-period="{{item.key}}" bindtap="setPeriod">{{item.name}}</button></view>
+            <view class="pgrid"><block wx:for="{{glucosePeriods}}" wx:key="key"><button wx:if="{{item.common || item.active || showMorePeriods}}" class="chip period-chip {{item.className}}" aria-label="{{item.ariaLabel}}" data-period="{{item.key}}" bindtap="setPeriod"><text class="period-main">{{item.name}}</text><text wx:if="{{item.detail}}" class="period-detail">{{item.detail}}</text></button></block></view>
+            <button class="more-periods" bindtap="toggleMorePeriods">{{showMorePeriods ? '收起其它时段' : '更多时段 ›'}}</button>
             <view class="f-label">情景标签（选填）</view>
             <view class="tagrow"><button wx:for="{{glucoseTags}}" wx:key="name" class="chip {{item.className}}" data-tag="{{item.name}}" bindtap="toggleTag">{{item.name}}</button></view>
           </block>
@@ -85,7 +87,7 @@
         <button class="key" data-key="0" bindtap="pressKey">0</button>
         <button class="key fn" data-key="del" bindtap="pressKey">删除</button>
       </view>
-      <view class="record-actions"><button class="btn primary record-save" loading="{{saving}}" disabled="{{saving}}" bindtap="save">保存记录</button></view>
+      <view class="record-actions"><button class="btn primary record-save" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{editingId ? '保存修改' : '保存记录'}}</button></view>
     </view>
 
     <view class="toast {{toastOn}}">{{toast}}</view>

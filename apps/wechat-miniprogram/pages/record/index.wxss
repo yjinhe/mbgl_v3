@@ -32,6 +32,24 @@
   padding-left: 28rpx;
 }
 
+.draft-notice {
+  padding: 16rpx 20rpx;
+  margin-bottom: 16rpx;
+  border-radius: 18rpx;
+  color: var(--brand);
+  background: var(--brand-soft);
+  font-size: 25rpx;
+  line-height: 1.5;
+}
+
+.more-periods {
+  min-height: 70rpx;
+  padding: 12rpx;
+  color: var(--brand);
+  background: transparent;
+  font-size: 27rpx;
+}
+
 .sheet .msg button {
   min-height: 84rpx;
   font-size: 30rpx;
@@ -101,6 +119,30 @@
 .sheet .chip {
   min-height: 84rpx;
   font-size: 29rpx;
+}
+
+.pgrid .period-chip {
+  min-height: 96rpx;
+  flex-direction: column;
+  gap: 6rpx;
+  line-height: 1.15;
+}
+
+.period-main {
+  font-size: 29rpx;
+  font-weight: 650;
+}
+
+.period-detail {
+  color: var(--ink-3);
+  font-size: 24rpx;
+  font-weight: 500;
+  line-height: 1.15;
+}
+
+.period-chip.on .period-detail {
+  color: var(--card);
+  opacity: .88;
 }
 
 .bp-fields {

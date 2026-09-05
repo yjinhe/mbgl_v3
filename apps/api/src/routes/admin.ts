@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireAuth, type AdminToken } from '../plugins/auth.js';
 import { hashPassword, isStrongPassword, verifyPassword } from '../services/password.js';
+import { adminUserRecords, listAdminUsers } from '../services/admin-users.js';
 
 const strongPasswordSchema = z.string().min(12).max(128).refine(isStrongPassword, {
   message: '密码至少 12 位，且需包含大小写字母、数字和符号'
@@ -18,8 +19,43 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   app.addHook('preHandler', async (request, reply) => {
-    if (request.url.endsWith('/auth/login')) return;
+    if (request.method === 'POST' && request.routeOptions.url === '/api/admin/auth/login') return;
     return requireAuth(request, reply, 'admin');
+  });
+
+  app.get('/users', async (request) => {
+    const query = z.object({
+      q: z.string().trim().max(80).default(''),
+      activity: z.enum(['all', 'new_without_records', 'with_records', 'inactive']).default('all'),
+      days: z.coerce.number().pipe(z.union([z.literal(7), z.literal(30)])).default(7),
+      page: z.coerce.number().int().min(1).max(100000).default(1),
+      limit: z.coerce.number().int().min(1).max(50).default(20)
+    }).parse(request.query);
+    const result = await listAdminUsers(app.prisma, query);
+    request.log.info({ event: 'admin_user_access', action: 'list_users', adminId: (request.auth as AdminToken).adminId,
+      userIds: result.items.map((user) => user.id) }, 'admin user access');
+    return result;
+  });
+
+  app.get('/users/:id/records', async (request, reply) => {
+    const userId = z.string().min(1).max(100).parse((request.params as { id: string }).id);
+    const query = z.object({ metric: z.enum(['all', 'glucose', 'bp', 'lipid', 'uric']).default('all'),
+      page: z.coerce.number().int().min(1).max(100000).default(1), limit: z.coerce.number().int().min(1).max(100).default(20)
+    }).parse(request.query);
+    const result = await adminUserRecords(app.prisma, userId, query);
+    if (!result) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '用户不存在或已注销' } });
+    request.log.info({ event: 'admin_user_access', action: 'view_records', adminId: (request.auth as AdminToken).adminId,
+      userId, recordIds: result.items.map((record) => record.id) }, 'admin user access');
+    return result;
+  });
+
+  app.patch('/users/:id/note', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
+    const userId = z.string().min(1).max(100).parse((request.params as { id: string }).id);
+    const { adminNote } = z.object({ adminNote: z.string().trim().max(100) }).strict().parse(request.body);
+    const updated = await app.prisma.user.updateMany({ where: { id: userId, deactivatedAt: null }, data: { adminNote } });
+    if (!updated.count) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '用户不存在或已注销' } });
+    request.log.info({ event: 'admin_user_access', action: 'update_admin_note', adminId: (request.auth as AdminToken).adminId, userId }, 'admin user access');
+    return { id: userId, adminNote };
   });
 
   app.post('/auth/change-password', { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } }, async (request, reply) => {

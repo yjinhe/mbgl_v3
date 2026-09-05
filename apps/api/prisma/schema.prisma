@@ -17,6 +17,7 @@ model User {
   passwordHash  String?
   authVersion   Int                @default(0)
   nickname      String             @default("微信用户")
+  adminNote     String             @default("")
   avatarUrl     String?
   sex           String?
   unit          String             @default("mmol")
@@ -31,6 +32,20 @@ model User {
   uric          UricRecord[]
   summaries     DailySummary[]
   binding       PharmacyCustomer[]
+  submissions   RecordSubmission[]
+}
+
+model RecordSubmission {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key         String
+  metric      String
+  requestHash String
+  recordId    String?
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, key])
 }
 
 model GlucoseRecord {
