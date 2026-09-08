@@ -6,9 +6,13 @@
 const { getToken, request } = require('./api');
 const { periodNames } = require('./metrics');
 
-const REMINDER_METRICS = ['glucose', 'bp'];
-const METRIC_NAMES = { glucose: '血糖', bp: '血压' };
-const DEFAULT_TIMES = { glucose: '07:00', bp: '07:30' };
+// 'medication' (docs/WECHAT-MEDICATION-SPEC.md) has no time of its own: the
+// server reminds at the times stored on each medication, so its plan only
+// carries `enabled` and `quota`.
+const REMINDER_METRICS = ['glucose', 'bp', 'medication'];
+const TIMELESS_METRICS = ['medication'];
+const METRIC_NAMES = { glucose: '血糖', bp: '血压', medication: '服药' };
+const DEFAULT_TIMES = { glucose: '07:00', bp: '07:30', medication: '00:00' };
 const DEFAULT_GLUCOSE_PERIOD = 'fasting';
 const OFFER_DISMISSED_KEY = 'tangji_reminder_offer_dismissed';
 const MINIPROGRAM_REQUIRED_MESSAGE = '请先在小程序里微信登录';
@@ -33,6 +37,10 @@ function isTime(value) {
 
 function metricName(metric) {
   return METRIC_NAMES[metric] || '';
+}
+
+function hasPlanTime(metric) {
+  return isReminderMetric(metric) && !TIMELESS_METRICS.includes(metric);
 }
 
 function normalizeTemplates(templates) {
@@ -188,10 +196,8 @@ function reportSubscriptions(accepted) {
 
 function savePlan(metric, body = {}) {
   if (!isReminderMetric(metric)) return Promise.reject(new Error('暂不支持这种提醒'));
-  const data = {
-    enabled: Boolean(body.enabled),
-    time: isTime(body.time) ? body.time : DEFAULT_TIMES[metric]
-  };
+  const data = { enabled: Boolean(body.enabled) };
+  if (hasPlanTime(metric)) data.time = isTime(body.time) ? body.time : DEFAULT_TIMES[metric];
   if (metric === 'glucose') data.period = body.period || DEFAULT_GLUCOSE_PERIOD;
   return request(`/api/app/reminders/${metric}`, { method: 'PUT', data }).then((result) => {
     invalidateReminders();
@@ -225,7 +231,7 @@ function dismissOffer(metric) {
 function planSummary(plans) {
   const parts = normalizePlans(plans)
     .filter((plan) => plan.enabled)
-    .map((plan) => `${metricName(plan.metric)} ${plan.time}`);
+    .map((plan) => `${metricName(plan.metric)} ${hasPlanTime(plan.metric) ? plan.time : '已开启'}`);
   return parts.length ? parts.join(' · ') : '未开启';
 }
 
@@ -261,6 +267,7 @@ module.exports = {
   dismissOffer,
   enabledPlanText,
   enabledTemplateMetrics,
+  hasPlanTime,
   hasTemplates,
   invalidateReminders,
   isReminderMetric,

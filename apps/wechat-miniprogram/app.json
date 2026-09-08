@@ -8,6 +8,7 @@
     "pages/recycle/index",
     "pages/weekly-report/index",
     "pages/reminders/index",
+    "pages/medications/index",
     "pages/legal/privacy/index",
     "pages/legal/terms/index"
   ],

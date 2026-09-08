@@ -190,14 +190,39 @@ describe('reminder subscription helpers', () => {
     const second = await loadReminders();
     expect(second).toBe(first);
     expect(api.request).toHaveBeenCalledTimes(1);
-    expect(first.plans.map((plan: any) => plan.metric)).toEqual(['glucose', 'bp']);
+    expect(first.plans.map((plan: any) => plan.metric)).toEqual(['glucose', 'bp', 'medication']);
     expect(planFor(first, 'glucose')).toMatchObject({ enabled: false, time: '07:00', period: 'fasting', quota: 0 });
     expect(planFor(first, 'bp')).toMatchObject({ enabled: true, time: '07:30', period: null, quota: 2 });
+    expect(planFor(first, 'medication')).toMatchObject({ enabled: false, period: null, quota: 0 });
 
     await savePlan('bp', { enabled: false, time: '07:30' });
     expect(api.request).toHaveBeenLastCalledWith('/api/app/reminders/bp', { method: 'PUT', data: { enabled: false, time: '07:30' } });
     await loadReminders();
     expect(api.request.mock.calls.filter((call) => call[0] === '/api/app/reminders')).toHaveLength(2);
+  });
+
+  test('treats the medication plan as a timeless switch', async () => {
+    const api = remindersApi({
+      plans: [{ metric: 'medication', enabled: true, quota: 1 }],
+      templates: { ...TEMPLATES, medication: 'tmpl-medication' }
+    });
+    const { enabledTemplateMetrics, hasPlanTime, loadReminders, planSummary, quotaEmptyMetrics, savePlan } = loadReminderUtils(api);
+
+    expect(hasPlanTime('glucose')).toBe(true);
+    expect(hasPlanTime('medication')).toBe(false);
+    const state = await loadReminders();
+    expect(enabledTemplateMetrics(state)).toEqual(['medication']);
+    expect(quotaEmptyMetrics(state)).toEqual([]);
+
+    // Only `enabled` goes to the server: the API rejects time/period here.
+    await savePlan('medication', { enabled: true, time: '08:00', period: 'fasting' });
+    expect(api.request).toHaveBeenLastCalledWith('/api/app/reminders/medication', { method: 'PUT', data: { enabled: true } });
+
+    expect(planSummary([
+      { metric: 'glucose', enabled: true, time: '07:00' },
+      { metric: 'medication', enabled: true }
+    ])).toBe('血糖 07:00 · 服药 已开启');
+    expect(planSummary([{ metric: 'medication', enabled: false }])).toBe('未开启');
   });
 
   test('summarises enabled plans and rounds record times to five minutes', () => {
