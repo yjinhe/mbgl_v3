@@ -40,21 +40,49 @@
 
 .reminder-switch {
   width: 168rpx;
-  height: 96rpx;
+  height: 88rpx;
+  min-height: 96rpx;
   flex: none;
-  padding: 0 22rpx;
-  font-size: 28rpx;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+  color: #52655F;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.reminder-switch::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 8rpx;
+  right: 0;
+  bottom: 8rpx;
+  left: 0;
+  border-radius: 999rpx;
+  background: #DCE5E1;
+}
+
+.reminder-switch.on::before {
+  background: var(--ok);
 }
 
 .reminder-switch .switch-knob {
-  top: 8rpx;
-  left: 8rpx;
-  width: 80rpx;
-  height: 80rpx;
+  top: 16rpx;
+  left: 16rpx;
+  width: 64rpx;
+  height: 64rpx;
+  box-shadow: 0 3rpx 10rpx rgba(22, 48, 43, .16);
 }
 
 .reminder-switch.on .switch-knob {
-  left: 80rpx;
+  left: 88rpx;
+}
+
+.reminder-switch[disabled] {
+  opacity: .72;
 }
 
 .reminder-picker {
