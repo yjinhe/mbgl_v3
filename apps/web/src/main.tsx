@@ -89,13 +89,25 @@ function getToken() {
   return localStorage.getItem('tangji_app_token') || '';
 }
 
+let onUnauthorized: (() => void) | null = null;
+
+function createIdempotencyKey() {
+  const raw = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return raw.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 120);
+}
+
 async function api(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
-  headers.set('content-type', 'application/json');
+  if (init.body != null && !headers.has('content-type')) headers.set('content-type', 'application/json');
   const token = getToken();
   if (token) headers.set('authorization', `Bearer ${token}`);
   const res = await fetch(`${API}${path}`, { ...init, headers });
-  if (res.status === 401) localStorage.removeItem('tangji_app_token');
+  if (res.status === 401 && token) {
+    localStorage.removeItem('tangji_app_token');
+    onUnauthorized?.();
+  }
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error?.message || res.statusText);
   if (res.status === 204) return null;
   return res.json();
@@ -463,6 +475,14 @@ function App() {
   }, [token]);
 
   useEffect(() => {
+    onUnauthorized = () => {
+      setAuthNotice('登录状态已失效，请重新登录');
+      clearAppSession();
+    };
+    return () => { onUnauthorized = null; };
+  }, []);
+
+  useEffect(() => {
     if (token || import.meta.env.DEV) return;
     let cancelled = false;
     const callback = new URL(window.location.href);
@@ -540,10 +560,14 @@ function App() {
   }
 
   async function deleteRecord(metric: Metric, record: any) {
-    await api(`/api/app/records/${metric}/${record.id}`, { method: 'DELETE' });
-    setRecordAction(null);
-    showToast('已删除 · 7 天内可在回收站找回');
-    await refresh();
+    try {
+      await api(`/api/app/records/${metric}/${record.id}`, { method: 'DELETE' });
+      setRecordAction(null);
+      showToast('已删除 · 7 天内可在回收站找回');
+      await refresh();
+    } catch (error: any) {
+      showToast(error.message || '删除失败，请稍后重试');
+    }
   }
 
   if (!token) {
@@ -571,7 +595,7 @@ function App() {
             <section className={`page ${tab === 'stats' ? 'on' : ''}`}><Stats records={records} metric={statMetric} setMetric={setStatMetric} me={me} openReport={() => setSub('report')} /></section>
             <section className={`page ${tab === 'mine' ? 'on' : ''}`}><Mine me={me} refresh={refresh} showToast={showToast} openBind={() => setSub('bind')} openRecycle={() => setSub('recycle')} openExport={() => setExportSheet(true)} openSecurity={() => setSub('security')} logout={clearAppSession} deactivateAccount={deactivateAccount} setModal={setModal} /></section>
             {sub === 'bind' && <BindSub close={() => setSub(null)} refresh={refresh} showToast={showToast} setModal={setModal} />}
-            {sub === 'report' && <ReportSub close={() => setSub(null)} showToast={showToast} openExport={() => setExportSheet(true)} />}
+            {sub === 'report' && <ReportSub me={me} close={() => setSub(null)} showToast={showToast} openExport={() => setExportSheet(true)} />}
             {sub === 'recycle' && <RecycleSub close={() => setSub(null)} refresh={refresh} showToast={showToast} />}
             {sub === 'security' && <AccountSecuritySub me={me} close={() => setSub(null)} onComplete={() => { setAuthNotice('密码已修改，请使用新密码重新登录'); clearAppSession(); }} />}
           </div>
@@ -686,7 +710,7 @@ function RecordRow({ metric, record, onClick }: { metric: Metric; record: any; o
 }
 
 function readRecord(metric: Metric, record: any) {
-  if (metric === 'glucose') return `${record.displayValue} mmol/L`;
+  if (metric === 'glucose') return `${record.displayValue} ${record.displayUnit || 'mmol/L'}`;
   if (metric === 'bp') return `${record.sbp}/${record.dbp} mmHg${record.pulse ? ` · ♥${record.pulse}` : ''}`;
   if (metric === 'uric') return `${record.value} μmol/L`;
   return lipidItems.filter(([k]) => record[k] != null).map(([k, , ab]) => `${ab} ${record[k]}`).join(' · ');
@@ -714,7 +738,9 @@ function StatsBody({ metric, records, me }: any) {
   if (metric === 'bp') {
     const avgS = Math.round(records.reduce((s: number, r: any) => s + r.sbp, 0) / records.length);
     const avgD = Math.round(records.reduce((s: number, r: any) => s + r.dbp, 0) / records.length);
-    return <><div className="mgrid"><MetricBox k="平均收缩压" v={avgS} u="mmHg" /><MetricBox k="平均舒张压" v={avgD} u="mmHg" /><MetricBox k="达标率" v={Math.round(records.filter((r: any) => r.status.key === 'ok').length / records.length * 100)} u="%" /><MetricBox k="平均脉搏" v={Math.round(records.reduce((s: number, r: any) => s + (r.pulse || 0), 0) / records.length)} /></div><div className="card"><div className="card-h"><span className="t">血压趋势</span></div><MiniTrend records={records} metric={metric} /></div></>;
+    const pulses: number[] = records.map((r: any) => r.pulse).filter((p: any) => p != null);
+    const avgPulse = pulses.length ? Math.round(pulses.reduce((s, p) => s + p, 0) / pulses.length) : '—';
+    return <><div className="mgrid"><MetricBox k="平均收缩压" v={avgS} u="mmHg" /><MetricBox k="平均舒张压" v={avgD} u="mmHg" /><MetricBox k="达标率" v={Math.round(records.filter((r: any) => r.status.key === 'ok').length / records.length * 100)} u="%" /><MetricBox k="平均脉搏" v={avgPulse} /></div><div className="card"><div className="card-h"><span className="t">血压趋势</span></div><MiniTrend records={records} metric={metric} /></div></>;
   }
   if (metric === 'lipid') {
     const latest = records[0];
@@ -738,14 +764,23 @@ function MiniTrend({ records, metric }: any) {
 }
 
 function Mine({ me, refresh, showToast, openBind, openRecycle, openExport, openSecurity, logout, deactivateAccount, setModal }: any) {
-  async function patch(data: any) {
-    await api('/api/app/me', { method: 'PATCH', body: JSON.stringify(data) });
-    await refresh();
+  async function patch(data: any, done: string) {
+    try {
+      await api('/api/app/me', { method: 'PATCH', body: JSON.stringify(data) });
+      await refresh();
+      showToast(done);
+    } catch (error: any) {
+      showToast(error.message || '更新失败，请稍后重试');
+    }
   }
   async function unbind() {
-    await api('/api/app/pharmacy/bind', { method: 'DELETE' });
-    showToast('已解绑 · 该药房已无法查看你的记录');
-    await refresh();
+    try {
+      await api('/api/app/pharmacy/bind', { method: 'DELETE' });
+      showToast('已解绑 · 该药房已无法查看你的记录');
+      await refresh();
+    } catch (error: any) {
+      showToast(error.message || '解绑失败，请稍后重试');
+    }
   }
   function confirmUnbind() {
     if (!me?.binding) return;
@@ -778,8 +813,8 @@ function Mine({ me, refresh, showToast, openBind, openRecycle, openExport, openS
       </div>
       <div className="sec-label">健康档案</div>
       <div className="card" style={{ padding: '4px 16px' }}>
-        <div className="cell"><div className="cm"><div className="ct">性别</div><div className="cs">影响尿酸参考上限</div></div><div className="seg"><button className={me?.sex === 'male' ? 'on' : ''} onClick={() => patch({ sex: 'male' }).then(() => showToast('已更新性别 · 尿酸参考上限按 <420 计算'))}>男</button><button className={me?.sex === 'female' ? 'on' : ''} onClick={() => patch({ sex: 'female' }).then(() => showToast('已更新性别 · 尿酸参考上限按 <360 计算'))}>女</button></div></div>
-        <div className="cell"><div className="cm"><div className="ct">血糖单位</div><div className="cs">仅血糖支持单位切换</div></div><div className="seg"><button className={me?.unit === 'mmol' ? 'on' : ''} onClick={() => patch({ unit: 'mmol' }).then(() => showToast('已切换为 mmol/L · 全部数据自动换算'))}>mmol/L</button><button className={me?.unit === 'mgdl' ? 'on' : ''} onClick={() => patch({ unit: 'mgdl' }).then(() => showToast('已切换为 mg/dL · 全部数据自动换算'))}>mg/dL</button></div></div>
+        <div className="cell"><div className="cm"><div className="ct">性别</div><div className="cs">影响尿酸参考上限</div></div><div className="seg"><button className={me?.sex === 'male' ? 'on' : ''} onClick={() => patch({ sex: 'male' }, '已更新性别 · 尿酸参考上限按 <420 计算')}>男</button><button className={me?.sex === 'female' ? 'on' : ''} onClick={() => patch({ sex: 'female' }, '已更新性别 · 尿酸参考上限按 <360 计算')}>女</button></div></div>
+        <div className="cell"><div className="cm"><div className="ct">血糖单位</div><div className="cs">仅血糖支持单位切换</div></div><div className="seg"><button className={me?.unit === 'mmol' ? 'on' : ''} onClick={() => patch({ unit: 'mmol' }, '已切换为 mmol/L · 全部数据自动换算')}>mmol/L</button><button className={me?.unit === 'mgdl' ? 'on' : ''} onClick={() => patch({ unit: 'mgdl' }, '已切换为 mg/dL · 全部数据自动换算')}>mg/dL</button></div></div>
       </div>
       <div className="sec-label">服务药房</div>
       <div className="card">{me?.binding ? <div className="bound-cell"><div className="bi"><div className="bn">{me.binding.pharmacyName}</div><div className="bs">{fmtMD(me.binding.boundAt)} 起 · 该药房可查看你的健康记录</div></div><button className="danger-text" onClick={confirmUnbind}>解绑</button></div> : <div className="cell" onClick={openBind}><div className="cm"><div className="ct" style={{ color: 'var(--brand)' }}>＋ 绑定服务药房</div><div className="cs">输入药房邀请码，获得用药与健康管理服务</div></div></div>}</div>
@@ -854,12 +889,12 @@ function BindSub({ close, refresh, showToast, setModal }: any) {
     try { setPreview(await api(`/api/app/pharmacy/invite/${code.toUpperCase()}`)); } catch { showToast('邀请码无效或已过期'); }
   }
   function bind() {
-    setModal({ title: '授权数据查看', ring: 'var(--brand-soft)', icon: 'ℹ️', body: `绑定「${preview.pharmacyName}」后，该药房的工作人员将可以查看你在糖迹记录的全部健康数据（血糖、血压、血脂、尿酸），用于为你提供用药提醒与健康管理服务。你可以随时在「我的 → 服务药房」解绑，解绑后立即终止其全部访问（含历史数据）。`, actions: [{ t: '暂不' }, { t: '同意并绑定', cb: async () => { await api('/api/app/pharmacy/bind', { method: 'POST', body: JSON.stringify({ code }) }); showToast(`已绑定「${preview.pharmacyName}」· 可随时在本页解绑`); await refresh(); close(); } }] });
+    setModal({ title: '授权数据查看', ring: 'var(--brand-soft)', icon: 'ℹ️', body: `绑定「${preview.pharmacyName}」后，该药房的工作人员将可以查看你在糖迹记录的全部健康数据（血糖、血压、血脂、尿酸），用于为你提供用药提醒与健康管理服务。你可以随时在「我的 → 服务药房」解绑，解绑后立即终止其全部访问（含历史数据）。`, actions: [{ t: '暂不' }, { t: '同意并绑定', cb: async () => { try { await api('/api/app/pharmacy/bind', { method: 'POST', body: JSON.stringify({ code }) }); showToast(`已绑定「${preview.pharmacyName}」· 可随时在本页解绑`); await refresh(); close(); } catch (error: any) { showToast(error.message || '绑定失败，请稍后重试'); } } }] });
   }
   return <div className="subpage on"><div className="sub-nav"><button className="back" onClick={close}>‹</button><span className="t">绑定服务药房</span></div><div className="sub-body"><div className="code-in"><input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="如 KN23DEMO" maxLength={8} /><button onClick={query}>查询</button></div>{preview && <><div className="ph-card"><div className="pn">{preview.pharmacyName}</div><div className="pd">{preview.address} · 邀请店员：{preview.staffName}</div></div><button className="btn primary" onClick={bind}>同意授权并绑定</button></>}</div></div>;
 }
 
-function ReportSub({ close, showToast, openExport }: any) {
+function ReportSub({ me, close, showToast, openExport }: any) {
   const [report, setReport] = useState<any>(null);
   useEffect(() => { api('/api/app/report/weekly').then(setReport).catch((e) => showToast(e.message)); }, []);
   async function saveImage() {
@@ -882,7 +917,7 @@ function ReportSub({ close, showToast, openExport }: any) {
           <>
             <div className="report" id="reportCard">
               <div className="rp-head"><div className="brand"><DropIcon color="currentColor" /> 糖迹 · 健康周报</div><h3>{report.title}</h3><div className="rg num">{fmtMD(report.from)} – {fmtMD(report.to)}</div></div>
-              {sections.glucose && <ReportGlucose data={sections.glucose} />}
+              {sections.glucose && <ReportGlucose data={sections.glucose} me={me} />}
               {sections.bp && <ReportBp data={sections.bp} />}
               {sections.lipid && <ReportLipid data={sections.lipid} />}
               {sections.uric && <ReportUric data={sections.uric} />}
@@ -898,14 +933,17 @@ function ReportSub({ close, showToast, openExport }: any) {
   );
 }
 
-function ReportGlucose({ data }: any) {
+function ReportGlucose({ data, me }: any) {
+  const unit = (me?.unit || 'mmol') as Unit;
+  const unitLabel = unit === 'mgdl' ? 'mg/dL' : 'mmol/L';
+  const show = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? displayGlucose(value, unit) : '-';
   return (
     <>
       <div className="rp-grid">
-        <div><div className="k">平均血糖</div><div className="v num">{data.avg?.toFixed?.(1) ?? '-'}</div></div>
+        <div><div className="k">平均血糖（{unitLabel}）</div><div className="v num">{show(data.avg)}</div></div>
         <div><div className="k">TIR</div><div className="v num" style={{ color: 'var(--ok)' }}>{Math.round((data.tirIn || 0) * 100)}%</div></div>
-        <div><div className="k">最高</div><div className="v num" style={{ color: 'var(--hi)' }}>{data.max?.toFixed?.(1) ?? '-'}</div></div>
-        <div><div className="k">最低</div><div className="v num" style={{ color: 'var(--lo)' }}>{data.min?.toFixed?.(1) ?? '-'}</div></div>
+        <div><div className="k">最高（{unitLabel}）</div><div className="v num" style={{ color: 'var(--hi)' }}>{show(data.max)}</div></div>
+        <div><div className="k">最低（{unitLabel}）</div><div className="v num" style={{ color: 'var(--lo)' }}>{show(data.min)}</div></div>
       </div>
       <div className="rp-sec"><h4>血糖趋势</h4><MiniTrend records={(data.series?.points || []).map((p: any, i: number) => ({ id: `${p.measuredAt || p.t || i}`, valueMmol: p.valueMmol ?? p.v ?? p.avg, status: p.status?.key ? p.status : { key: p.status || 'ok' }, measuredAt: p.measuredAt || p.t || p.date }))} metric="glucose" /></div>
     </>
@@ -936,10 +974,14 @@ function RecycleSub({ close, refresh, showToast }: any) {
   }
   useEffect(() => { void load(); }, []);
   async function restore(item: any) {
-    await api(`/api/app/records/${item.metric}/${item.id}/restore`, { method: 'POST' });
-    showToast('已恢复');
-    await refresh();
-    await load();
+    try {
+      await api(`/api/app/records/${item.metric}/${item.id}/restore`, { method: 'POST' });
+      showToast('已恢复');
+      await refresh();
+      await load();
+    } catch (error: any) {
+      showToast(error.message || '恢复失败，请稍后重试');
+    }
   }
   return (
     <div className="subpage on">
@@ -980,8 +1022,10 @@ function RecordSheet({ open, metric, setMetric, me, refresh, close, showToast, s
   const [bp, setBp] = useState({ f: 'sbp', sbp: '', dbp: '', pulse: '' });
   const [lipid, setLipid] = useState<any>({ tc: '', tg: '', ldl: '', hdl: '', fasting: true });
   const [fasting, setFasting] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey);
 
-  useEffect(() => { if (open) { const d = new Date(); setTime(toLocalInput(d)); setPeriod(metric === 'bp' ? inferBpPeriod(d) : inferGlucosePeriod(d)); setBuf(''); setNote(''); setTags([]); setBp({ f: 'sbp', sbp: '', dbp: '', pulse: '' }); } }, [open, metric]);
+  useEffect(() => { if (open) { const d = new Date(); setTime(toLocalInput(d)); setPeriod(metric === 'bp' ? inferBpPeriod(d) : inferGlucosePeriod(d)); setBuf(''); setNote(''); setTags([]); setBp({ f: 'sbp', sbp: '', dbp: '', pulse: '' }); setLipid({ tc: '', tg: '', ldl: '', hdl: '', fasting: true }); setFasting(true); setIdempotencyKey(createIdempotencyKey()); } }, [open, metric]);
 
   const live = useMemo(() => liveStatus(metric, buf, period, me, bp, lipid), [metric, buf, period, me, bp, lipid]);
 
@@ -1003,6 +1047,8 @@ function RecordSheet({ open, metric, setMetric, me, refresh, close, showToast, s
   }
 
   async function save() {
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const measuredAt = new Date(time).toISOString();
       let body: any;
@@ -1014,21 +1060,22 @@ function RecordSheet({ open, metric, setMetric, me, refresh, close, showToast, s
         if (Number(bp.sbp) <= Number(bp.dbp)) return showToast('收缩压应高于舒张压，请检查输入');
         body = { sbp: Number(bp.sbp), dbp: Number(bp.dbp), pulse: bp.pulse ? Number(bp.pulse) : undefined, period, measuredAt, tags, note };
       } else if (metric === 'lipid') {
+        if (lipidItems.some(([k]) => { const v = String(lipid[k] ?? '').trim(); return v !== '' && !Number.isFinite(Number(v)); })) return showToast('血脂数值格式不正确，请输入数字');
         body = { ...Object.fromEntries(lipidItems.map(([k]) => [k, lipid[k] === '' ? undefined : Number(lipid[k])])), fasting: lipid.fasting, measuredAt, note };
       } else {
         if (!buf) return showToast('请输入尿酸值');
         body = { value: Number(buf), fasting, measuredAt, note };
       }
-      const res = await api(`/api/app/records/${metric}`, { method: 'POST', body: JSON.stringify(body) });
+      const res = await api(`/api/app/records/${metric}`, { method: 'POST', headers: { 'idempotency-key': idempotencyKey }, body: JSON.stringify(body) });
       showToast(metric === 'glucose' ? `已记录 ${res.record.displayValue} ${me?.unit === 'mgdl' ? 'mg/dL' : 'mmol/L'}` : '已记录');
       close();
       await refresh();
       if (res.safetyAlert) window.setTimeout(() => setModal(safetyModal(metric, res.record, me)), 340);
-    } catch (e: any) { showToast(e.message); }
+    } catch (e: any) { showToast(e.message); } finally { setSubmitting(false); }
   }
 
   if (!open) return null;
-  return <div className={`sheet ${open ? 'on' : ''}`}><div className="sheet-h"><span className="t">记一笔</span><button className="x" onClick={close}>✕</button></div><div className="sheet-body"><div className="msg">{metrics.map((m) => <button className={metric === m.k ? 'on' : ''} key={m.k} onClick={() => setMetric(m.k)}><span className="seg-ic" style={{ color: metric === m.k ? m.c : 'inherit' }}><MetricIcon metric={m.k} /></span>{m.n}</button>)}</div><div className="time-row"><SheetTimeIcon /><input type="datetime-local" value={time} onChange={(e) => setTime(e.target.value)} /></div>{metric === 'bp' ? <BpPanel bp={bp} setBp={setBp} live={live} period={period} setPeriod={setPeriod} tags={tags} setTags={setTags} /> : metric === 'lipid' ? <LipidPanel lipid={lipid} setLipid={setLipid} live={live} /> : <BigPanel metric={metric} buf={buf} live={live} unit={metric === 'glucose' ? (me?.unit === 'mgdl' ? 'mg/dL' : 'mmol/L') : 'μmol/L'} period={period} setPeriod={setPeriod} tags={tags} setTags={setTags} fasting={fasting} setFasting={setFasting} />}<div className="f-label">备注（选填）</div><input className="note-in" maxLength={50} value={note} onChange={(e) => setNote(e.target.value)} /></div>{metric !== 'lipid' ? <div className="keypad">{['1','2','3','save','4','5','6','7','8','9','.','0','del'].map((k) => k === 'save' ? <button key={k} className="key save" onClick={save}>保存记录</button> : <button key={k} className={`key ${k === '.' || k === 'del' ? 'fn' : ''}`} onClick={() => key(k)}>{k === 'del' ? <DeleteKeyIcon /> : metric === 'bp' && k === '.' ? '下一项' : k === '.' ? '·' : k}</button>)}</div> : <div id="lipidSaveBar"><button className="btn primary" onClick={save}>保存记录</button></div>}</div>;
+  return <div className={`sheet ${open ? 'on' : ''}`}><div className="sheet-h"><span className="t">记一笔</span><button className="x" onClick={close}>✕</button></div><div className="sheet-body"><div className="msg">{metrics.map((m) => <button className={metric === m.k ? 'on' : ''} key={m.k} onClick={() => setMetric(m.k)}><span className="seg-ic" style={{ color: metric === m.k ? m.c : 'inherit' }}><MetricIcon metric={m.k} /></span>{m.n}</button>)}</div><div className="time-row"><SheetTimeIcon /><input type="datetime-local" value={time} onChange={(e) => setTime(e.target.value)} /></div>{metric === 'bp' ? <BpPanel bp={bp} setBp={setBp} live={live} period={period} setPeriod={setPeriod} tags={tags} setTags={setTags} /> : metric === 'lipid' ? <LipidPanel lipid={lipid} setLipid={setLipid} live={live} /> : <BigPanel metric={metric} buf={buf} live={live} unit={metric === 'glucose' ? (me?.unit === 'mgdl' ? 'mg/dL' : 'mmol/L') : 'μmol/L'} period={period} setPeriod={setPeriod} tags={tags} setTags={setTags} fasting={fasting} setFasting={setFasting} />}<div className="f-label">备注（选填）</div><input className="note-in" maxLength={50} value={note} onChange={(e) => setNote(e.target.value)} /></div>{metric !== 'lipid' ? <div className="keypad">{['1','2','3','save','4','5','6','7','8','9','.','0','del'].map((k) => k === 'save' ? <button key={k} className="key save" onClick={save} disabled={submitting}>{submitting ? '保存中…' : '保存记录'}</button> : <button key={k} className={`key ${k === '.' || k === 'del' ? 'fn' : ''}`} onClick={() => key(k)}>{k === 'del' ? <DeleteKeyIcon /> : metric === 'bp' && k === '.' ? '下一项' : k === '.' ? '·' : k}</button>)}</div> : <div id="lipidSaveBar"><button className="btn primary" onClick={save} disabled={submitting}>{submitting ? '保存中…' : '保存记录'}</button></div>}</div>;
 }
 
 function liveStatus(metric: Metric, buf: string, period: string, me: any, bp: any, lipid: any) {
@@ -1064,7 +1111,10 @@ function LipidPanel({ lipid, setLipid, live }: any) {
 }
 
 function safetyModal(metric: Metric, record: any, me: any) {
-  if (metric === 'bp') return { icon: '⚠️', ring: 'var(--hi-soft)', title: '本次血压偏高', body: `本次测量 ${record.sbp}/${record.dbp} mmHg，明显高于参考范围。建议静坐休息 5 分钟后复测；若仍明显偏高，或伴有剧烈头痛、胸闷、视物模糊等不适，请立即就医。`, actions: [{ t: '我已知晓' }] };
+  if (metric === 'bp') {
+    if (record.status?.key === 'dlow') return { icon: '⚠️', ring: 'var(--lo-soft)', title: '本次血压偏低', body: `本次测量 ${record.sbp}/${record.dbp} mmHg，低于参考范围。若伴有头晕、乏力、眼前发黑等不适，请坐下或平躺休息，必要时就医。`, actions: [{ t: '我已知晓' }] };
+    return { icon: '⚠️', ring: 'var(--hi-soft)', title: '本次血压偏高', body: `本次测量 ${record.sbp}/${record.dbp} mmHg，明显高于参考范围。建议静坐休息 5 分钟后复测；若仍明显偏高，或伴有剧烈头痛、胸闷、视物模糊等不适，请立即就医。`, actions: [{ t: '我已知晓' }] };
+  }
   if (metric === 'uric') return { icon: '⚠️', ring: 'var(--hi-soft)', title: '尿酸显著偏高', body: `本次测量 ${record.value} μmol/L，明显高于参考上限。建议注意多饮水，并尽快就医复查。`, actions: [{ t: '我已知晓' }] };
   if (record.status.key === 'dlow') return { icon: '⚠️', ring: 'var(--danger-soft)', title: '本次血糖偏低', body: `本次测量 ${record.displayValue} ${me?.unit === 'mgdl' ? 'mg/dL' : 'mmol/L'}，低于 3.9 mmol/L。建议立即进食 15–20g 速效碳水（如半杯果汁、3–4 块方糖），15 分钟后复测。若出现意识模糊或无法自行处理，请立即就医或呼叫急救。`, actions: [{ t: '我已知晓' }] };
   return { icon: '⚠️', ring: 'var(--hi-soft)', title: '血糖显著偏高', body: `本次测量 ${record.displayValue} ${me?.unit === 'mgdl' ? 'mg/dL' : 'mmol/L'}，明显高于目标范围。如伴有口渴、乏力、恶心等不适，建议尽快就医，并注意补充水分。`, actions: [{ t: '我已知晓' }] };
