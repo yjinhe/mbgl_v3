@@ -444,8 +444,11 @@ describe('wechat miniprogram structure', () => {
 
     // Settings page.
     expect(remindersJson.navigationBarTitleText).toBe('测量提醒');
-    expect(remindersWxml).toContain('血糖');
-    expect(remindersWxml).toContain('血压');
+    // Card titles are rendered from utils/reminders METRIC_NAMES, so assert the names there and the loop in wxml.
+    const remindersUtil = fs.readFileSync(path.join(root, 'utils/reminders.js'), 'utf8');
+    expect(remindersUtil).toContain("glucose: '血糖'");
+    expect(remindersUtil).toContain("bp: '血压'");
+    expect(remindersWxml).toContain('{{item.name}}提醒');
     expect(remindersWxml).toContain('mode="time"');
     expect(remindersWxml).toContain('mode="selector"');
     expect(remindersWxml).toContain('bindtap="toggleReminder"');
