@@ -1,0 +1,100 @@
+.reminders-page {
+  padding-bottom: 48rpx;
+}
+
+.login-btn {
+  margin-top: 24rpx;
+}
+
+.reminder-card {
+  padding: 24rpx 28rpx 8rpx;
+}
+
+.reminder-head {
+  min-height: 104rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.reminder-head-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.reminder-name {
+  color: var(--ink);
+  font-size: 32rpx;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.reminder-state {
+  margin-top: 6rpx;
+  color: var(--ink-3);
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.reminder-switch {
+  width: 168rpx;
+  height: 96rpx;
+  flex: none;
+  padding: 0 22rpx;
+  font-size: 28rpx;
+}
+
+.reminder-switch .switch-knob {
+  top: 8rpx;
+  left: 8rpx;
+  width: 80rpx;
+  height: 80rpx;
+}
+
+.reminder-switch.on .switch-knob {
+  left: 80rpx;
+}
+
+.reminder-picker {
+  display: block;
+}
+
+.reminder-row {
+  min-height: 104rpx;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.reminder-picker:last-child .reminder-row {
+  border-bottom: 0;
+}
+
+.reminder-label {
+  flex: 1;
+  color: var(--ink-2);
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.reminder-value {
+  color: var(--ink);
+  font-size: 32rpx;
+  font-weight: 650;
+}
+
+.reminder-arrow {
+  color: var(--ink-3);
+  font-size: 32rpx;
+}
+
+.reminder-note {
+  margin: 0 4rpx 16rpx;
+  color: var(--ink-2);
+  font-size: 26rpx;
+  line-height: 1.6;
+}
