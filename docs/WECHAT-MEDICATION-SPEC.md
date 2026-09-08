@@ -166,7 +166,7 @@ model MedicationLog {
 
 ```
 WECHAT_TEMPLATE_MEDICATION_REMINDER=8aOOwEcaG0qUgpZwhrR6SevYAp1QkpShbN210qsJjWs
-WECHAT_TEMPLATE_MEDICATION_FIELDS=time1,thing2,thing3   # 待确认，顺序：服药时间,药品,提示说明
+WECHAT_TEMPLATE_MEDICATION_FIELDS=time1,thing5,thing3   # 已核对，顺序：服药时间,药品,提示说明
 ```
 
 `env.ts` 的 `reminderTemplates` 增加 `medication`（3 个字段）。`GET /api/app/reminders` 的 `templates` 增加 `medication`；未配置时小程序隐藏服药提醒开关，但常用药清单和打勾功能仍可用（记录不依赖提醒）。
@@ -209,6 +209,6 @@ WECHAT_TEMPLATE_MEDICATION_FIELDS=time1,thing2,thing3   # 待确认，顺序：�
 
 ## 11. 待确认
 
-- [ ] 用药模板字段 key。
+- [x] 用药模板字段 key：`time1,thing5,thing3`（2026-09-08 核对）。
 - [ ] 每种药最多 4 个时间点、最多 8 种药，是否够用。
 - [ ] 周报「本周服药」是否需要按天展示，本期只做总次数。

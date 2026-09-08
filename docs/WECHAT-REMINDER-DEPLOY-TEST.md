@@ -10,14 +10,14 @@
 |---|---|---|
 | 血糖模板 ID | 公众平台「订阅消息 → 我的模板」 | `qvQ6BOZEl8UZjy1i2hVuu4L0-R0zxe8NRA1LmxoWKfY` |
 | 血压模板 ID | 同上 | `d_a_7U22lRygaMbZjGjj87Z-t-AJfqjRa6UQSQkxdb8` |
-| 血糖模板字段 key | 「我的模板 → 血糖测量提醒 → 详情」的「详细内容」，形如 `{{time1.DATA}}` | **待抄录**，顺序：测量时间、测量时段、温馨提示 |
-| 血压模板字段 key | 「我的模板 → 血压测量提醒 → 详情」 | **待抄录**，顺序：提醒时间、备注 |
+| 血糖模板字段 key | 「我的模板 → 血糖测量提醒 → 详情」 | `date1,thing2,thing3`（测量时间、测量时段、温馨提示，已核对） |
+| 血压模板字段 key | 「我的模板 → 血压测量提醒 → 详情」 | `time4,thing2`（提醒时间、备注，已核对） |
 | 用药模板 ID | 同上 | `8aOOwEcaG0qUgpZwhrR6SevYAp1QkpShbN210qsJjWs` |
-| 用药模板字段 key | 「我的模板 → 用药提醒 → 详情」 | **待抄录**，顺序：服药时间、药品、提示说明 |
+| 用药模板字段 key | 「我的模板 → 用药提醒 → 详情」 | `time1,thing5,thing3`（服药时间、药品、提示说明，已核对） |
 | 服务器 | 已部署糖迹的宿主机，有 `.env.docker` 与 Docker 权限 | |
 | 微信开发者工具 | 能上传体验版，且测试微信号已加为体验成员 | |
 
-字段 key 是本次部署唯一未确认的输入。抄录时只取 `{{` 与 `.DATA}}` 之间的部分，例如 `{{time1.DATA}}` 取 `time1`。
+三组字段 key 已于 2026-09-08 核对并写入代码默认值，`.env.docker` 里可以不填 `*_FIELDS`；若日后换模板，抄录时只取 `{{` 与 `.DATA}}` 之间的部分，例如 `{{date1.DATA}}` 取 `date1`。
 
 ## 1. 打 tag 并准备发布
 
@@ -38,11 +38,11 @@ git push origin v20260909
 ```env
 # 小程序测量提醒（一次性订阅消息）
 WECHAT_TEMPLATE_GLUCOSE_REMINDER=qvQ6BOZEl8UZjy1i2hVuu4L0-R0zxe8NRA1LmxoWKfY
-WECHAT_TEMPLATE_GLUCOSE_FIELDS=<key1>,<key2>,<key3>
+WECHAT_TEMPLATE_GLUCOSE_FIELDS=date1,thing2,thing3
 WECHAT_TEMPLATE_BP_REMINDER=d_a_7U22lRygaMbZjGjj87Z-t-AJfqjRa6UQSQkxdb8
-WECHAT_TEMPLATE_BP_FIELDS=<key1>,<key2>
+WECHAT_TEMPLATE_BP_FIELDS=time4,thing2
 WECHAT_TEMPLATE_MEDICATION_REMINDER=8aOOwEcaG0qUgpZwhrR6SevYAp1QkpShbN210qsJjWs
-WECHAT_TEMPLATE_MEDICATION_FIELDS=<key1>,<key2>,<key3>
+WECHAT_TEMPLATE_MEDICATION_FIELDS=time1,thing5,thing3
 # 体验版联调阶段用 trial；验收通过后改回 formal
 WECHAT_MINIPROGRAM_STATE=trial
 ```
