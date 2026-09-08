@@ -396,7 +396,7 @@ export async function appRoutes(app: FastifyInstance) {
       const existing = await findRecord({ prisma: tx }, metric, (request.params as any).id, user.id);
       if (!existing) return null;
       const measuredAt = new Date(body.measuredAt ?? existing.measuredAt);
-      const record = await updateRecord({ prisma: tx }, metric, existing.id, body, measuredAt, String(body.note ?? existing.note).slice(0, 50), (result as any).valueMmol);
+      const record = await updateRecord({ prisma: tx }, metric, existing, body, measuredAt, String(body.note ?? existing.note).slice(0, 50), (result as any).valueMmol);
       if (metric === 'glucose') {
         const oldDay = localDayKey(existing.measuredAt);
         const newDay = localDayKey(measuredAt);
@@ -812,11 +812,18 @@ async function createRecord(app: RecordStore, metric: Metric, userId: string, bo
   });
 }
 
-async function updateRecord(app: RecordStore, metric: Metric, id: string, body: any, measuredAt: Date, note: string, valueMmol?: number) {
-  if (metric === 'glucose') return app.prisma.glucoseRecord.update({ where: { id }, data: { valueMmol, period: body.period, measuredAt, tags: JSON.stringify(body.tags ?? []), note } });
-  if (metric === 'bp') return app.prisma.bpRecord.update({ where: { id }, data: { sbp: Number(body.sbp), dbp: Number(body.dbp), pulse: body.pulse == null ? null : Number(body.pulse), period: body.period, measuredAt, tags: JSON.stringify(body.tags ?? []), note } });
-  if (metric === 'lipid') return app.prisma.lipidRecord.update({ where: { id }, data: { tc: body.tc == null ? null : Number(body.tc), tg: body.tg == null ? null : Number(body.tg), ldl: body.ldl == null ? null : Number(body.ldl), hdl: body.hdl == null ? null : Number(body.hdl), fasting: body.fasting ?? true, measuredAt, note } });
-  return app.prisma.uricRecord.update({ where: { id }, data: { value: Number(body.value), fasting: body.fasting ?? true, measuredAt, note } });
+async function updateRecord(app: RecordStore, metric: Metric, existing: any, body: any, measuredAt: Date, note: string, valueMmol?: number) {
+  // PATCH semantics: fields absent from the body keep their stored value; explicit null still clears nullable fields.
+  const id = existing.id as string;
+  const tags = body.tags === undefined ? String(existing.tags ?? '[]') : JSON.stringify(body.tags ?? []);
+  const fasting = body.fasting === undefined ? Boolean(existing.fasting ?? true) : Boolean(body.fasting);
+  if (metric === 'glucose') return app.prisma.glucoseRecord.update({ where: { id }, data: { valueMmol, period: body.period, measuredAt, tags, note } });
+  if (metric === 'bp') {
+    const pulse = body.pulse === undefined ? existing.pulse ?? null : body.pulse === null ? null : Number(body.pulse);
+    return app.prisma.bpRecord.update({ where: { id }, data: { sbp: Number(body.sbp), dbp: Number(body.dbp), pulse, period: body.period, measuredAt, tags, note } });
+  }
+  if (metric === 'lipid') return app.prisma.lipidRecord.update({ where: { id }, data: { tc: body.tc == null ? null : Number(body.tc), tg: body.tg == null ? null : Number(body.tg), ldl: body.ldl == null ? null : Number(body.ldl), hdl: body.hdl == null ? null : Number(body.hdl), fasting, measuredAt, note } });
+  return app.prisma.uricRecord.update({ where: { id }, data: { value: Number(body.value), fasting, measuredAt, note } });
 }
 
 async function softDeleteRecord(app: RecordStore, metric: Metric, id: string) {

@@ -18,8 +18,9 @@ function integerEnv(name: string, fallback: number, min: number, max: number): n
 
 const nodeEnv = env('NODE_ENV', 'development');
 const isProduction = nodeEnv === 'production';
-const jwtSecret = env('JWT_SECRET', 'dev-secret-change-me');
-const wechatMock = env('WECHAT_MOCK', isProduction ? 'false' : 'true') === 'true';
+// Fail closed: JWT_SECRET has no fallback and mock WeChat login is opt-in only (never allowed in production).
+const jwtSecret = env('JWT_SECRET');
+const wechatMock = env('WECHAT_MOCK', 'false') === 'true';
 const wechatAppId = optionalEnv('WECHAT_APPID');
 const wechatSecret = optionalEnv('WECHAT_SECRET');
 const wechatWebAppId = optionalEnv('WECHAT_WEB_APPID');

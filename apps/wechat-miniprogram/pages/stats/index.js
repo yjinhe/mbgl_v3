@@ -1,6 +1,6 @@
 const { getToken, request } = require('../../utils/api');
 const { captureDataLease, isDataLeaseCurrent, isPageFresh, markPageFresh } = require('../../utils/data-cache');
-const { ensureLogin, fetchMe } = require('../../utils/page');
+const { ensureLogin, fetchMe, friendlyErrorMessage, handleRequestError } = require('../../utils/page');
 const { demoStats } = require('../../utils/demo');
 const { lipidItems, metrics } = require('../../utils/metrics');
 const { PERIOD_FILTERS, buildStatsView, seriesPoints } = require('../../utils/stats-view');
@@ -73,6 +73,7 @@ Page({
     this._detailRows = [];
     this.setData({ loading: true, error: '', summary: [], bars: [], hasBars: false, visibleRows: [], totalCount: 0, hasMoreRows: false });
     const current = () => loadSeq === this._loadSeq && key === this.cacheKey() && isDataLeaseCurrent(lease, getToken());
+    let requestToken = '';
     try {
       if (!(await ensureLogin(this))) {
         if (!current()) return;
@@ -90,6 +91,7 @@ Page({
         this.markDataFresh(key);
         return;
       }
+      requestToken = getToken();
       this.setData({ authed: true });
       const queryPeriod = metric === 'glucose' ? `&period=${period}` : '';
       const [data, me] = await Promise.all([request(`/api/app/stats?metric=${metric}&range=${range}${queryPeriod}`), fetchMe()]);
@@ -99,7 +101,9 @@ Page({
       this.applyStats(data || {}, unit);
       this.markDataFresh(key);
     } catch (error) {
-      if (current()) this.setData({ error: error.message || '暂时没能加载，请检查网络后重试' });
+      if (!current()) return;
+      if (handleRequestError(this, error, requestToken)) return;
+      this.setData({ error: friendlyErrorMessage(error, '暂时没能加载，请检查网络后重试') });
     } finally {
       if (loadSeq === this._loadSeq) this.setData({ loading: false });
       if (this._loadingKey === loadingKey) this._loadingKey = '';

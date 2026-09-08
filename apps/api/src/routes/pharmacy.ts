@@ -40,7 +40,7 @@ export async function pharmacyRoutes(app: FastifyInstance) {
   });
 
   app.addHook('preHandler', async (request, reply) => {
-    if (request.url.endsWith('/auth/login')) return;
+    if (request.method === 'POST' && request.routeOptions.url === '/api/pharmacy/auth/login') return;
     return requireAuth(request, reply, 'pharmacy');
   });
 
@@ -188,7 +188,7 @@ export async function pharmacyRoutes(app: FastifyInstance) {
     if (!ownerUserId || !(await assertActiveCustomer(app, auth.pharmacyId, ownerUserId))) return forbidden(reply);
     const followUp = await app.prisma.followUp.upsert({
       where: { pharmacyId_metric_recordId: { pharmacyId: auth.pharmacyId, metric: body.metric, recordId: body.recordId } },
-      update: {},
+      update: { staffId: auth.staffId, ...(body.note === undefined ? {} : { note: body.note }) },
       create: { pharmacyId: auth.pharmacyId, staffId: auth.staffId, metric: body.metric, recordId: body.recordId, note: body.note ?? '' }
     });
     return { followUp };
@@ -321,7 +321,7 @@ async function recordsForMetricPage(app: FastifyInstance, metric: Metric, userId
 }
 
 async function ownerOfRecord(app: FastifyInstance, metric: Metric, recordId: string) {
-  const rows = await recordsForMetricRaw(app, metric, { id: recordId });
+  const rows = await recordsForMetricRaw(app, metric, { id: recordId, deletedAt: null });
   return rows[0]?.userId ?? null;
 }
 

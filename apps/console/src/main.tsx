@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import QRCode from 'qrcode';
 import { AdminUsers } from './admin-users';
+import { formatDate, formatDateTime } from './format';
 import './styles.css';
 
 const API = import.meta.env.VITE_API_BASE || '';
@@ -20,14 +21,41 @@ function clearConsoleSession() {
   }
 }
 
+let onSessionLost: (() => void) | null = null;
+
+// requireAuth 对失效会话返回 401 UNAUTHORIZED，或与 requireOwner / 越权访问客户完全相同的 403 FORBIDDEN。
+// 收到 403 时用一个任何在职员工/管理员都可访问的接口复核会话，避免把正常的“无权限”当成掉线。
+async function sessionLost() {
+  const t = token();
+  if (!t) return true;
+  try {
+    const res = await fetch(`${API}${aud() === 'admin' ? '/api/admin/stats' : '/api/pharmacy/profile'}`, { headers: { authorization: `Bearer ${t}` } });
+    return res.status === 401 || res.status === 403;
+  } catch {
+    return false;
+  }
+}
+
 async function api(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set('content-type', 'application/json');
   const t = token();
   if (t) headers.set('authorization', `Bearer ${t}`);
   const res = await fetch(`${API}${path}`, { ...init, headers });
-  if (res.status === 401) clearConsoleSession();
-  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error?.message || res.statusText);
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const code = payload?.error?.code;
+    const authEndpoint = path.includes('/auth/');
+    const lost = t && !authEndpoint && (
+      (res.status === 401 && (!code || code === 'UNAUTHORIZED')) ||
+      (res.status === 403 && code === 'FORBIDDEN' && await sessionLost())
+    );
+    if (lost) {
+      clearConsoleSession();
+      onSessionLost?.();
+    }
+    throw new Error(payload?.error?.message || res.statusText);
+  }
   if (res.status === 204) return null;
   return res.json();
 }
@@ -42,6 +70,21 @@ function App() {
   const [loginNotice, setLoginNotice] = useState('');
   const [sessionReady, setSessionReady] = useState(false);
 
+  function handleSessionLost() {
+    clearConsoleSession();
+    setStaff(null);
+    setPharmacy(null);
+    setPasswordOpen(false);
+    setSessionReady(false);
+    setLoginNotice('登录状态已失效，请重新登录');
+    setLogged(false);
+  }
+
+  useEffect(() => {
+    onSessionLost = handleSessionLost;
+    return () => { onSessionLost = null; };
+  }, []);
+
   useEffect(() => {
     if (!logged) {
       setSessionReady(false);
@@ -51,15 +94,7 @@ function App() {
     const validationPath = aud() === 'admin' ? '/api/admin/stats' : '/api/pharmacy/dashboard';
     api(validationPath)
       .then(() => { if (active) setSessionReady(true); })
-      .catch(() => {
-        if (!active) return;
-        clearConsoleSession();
-        setStaff(null);
-        setPharmacy(null);
-        setPasswordOpen(false);
-        setLoginNotice('登录状态已失效，请重新登录');
-        setLogged(false);
-      });
+      .catch(() => { if (active) handleSessionLost(); });
     return () => { active = false; };
   }, [logged]);
 
@@ -143,7 +178,10 @@ function Login({ onLogin, notice }: any) {
       setSubmitting(true);
       setError('');
       const res = await fetch(`${API}/api/${kind}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password }) });
-      if (!res.ok) throw new Error('用户名或密码不正确');
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error((res.status !== 401 && payload?.error?.message) || '用户名或密码不正确');
+      }
       onLogin(await res.json(), kind);
     } catch (e: any) {
       setError(e.message);
@@ -210,7 +248,7 @@ function Router({ view, setView, showToast, setPharmacy }: any) {
 function Dashboard({ setView }: any) {
   const [data, setData] = useState<any>(null);
   useEffect(() => { api('/api/pharmacy/dashboard').then(setData); }, []);
-  return <>{data && <><div className="bstats">{[['客户总数', data.customerTotal], ['本周新增', data.weekNew], ['近 7 天活跃', data.activeIn7d], ['待跟进预警', data.pendingAlerts]].map(([k, v]) => <div className="bstat" key={k as string} onClick={() => k === '待跟进预警' && setView('alerts')}><div className="k">{k}</div><div className={`v num ${k === '待跟进预警' ? 'alert' : ''}`}>{v as any}</div></div>)}</div><div className="bcols"><div className="bcard"><div className="bh"><span className="t">最新预警</span><span className="more" onClick={() => setView('alerts')}>全部 ›</span></div>{data.latestAlerts?.length ? <SimpleTable rows={data.latestAlerts.map((a: any) => [a.occurredAt.slice(5,16), a.customer.nickname, a.metric, a.record.status.label])} /> : <div className="empty">近 7 天没有待跟进的异常读数</div>}</div><div className="bcard"><div className="bh"><span className="t">最近绑定</span><span className="more" onClick={() => setView('customers')}>全部 ›</span></div><SimpleTable rows={(data.latestBindings || []).map((b: any) => [b.nickname, b.boundAt.slice(0,10)])} /></div></div></>}</>;
+  return <>{data && <><div className="bstats">{[['客户总数', data.customerTotal], ['本周新增', data.weekNew], ['近 7 天活跃', data.activeIn7d], ['待跟进预警', data.pendingAlerts]].map(([k, v]) => <div className="bstat" key={k as string} onClick={() => k === '待跟进预警' && setView('alerts')}><div className="k">{k}</div><div className={`v num ${k === '待跟进预警' ? 'alert' : ''}`}>{v as any}</div></div>)}</div><div className="bcols"><div className="bcard"><div className="bh"><span className="t">最新预警</span><span className="more" onClick={() => setView('alerts')}>全部 ›</span></div>{data.latestAlerts?.length ? <SimpleTable rows={data.latestAlerts.map((a: any) => [formatDateTime(a.occurredAt, { year: false }), a.customer.nickname, a.metric, a.record.status.label])} /> : <div className="empty">近 7 天没有待跟进的异常读数</div>}</div><div className="bcard"><div className="bh"><span className="t">最近绑定</span><span className="more" onClick={() => setView('customers')}>全部 ›</span></div><SimpleTable rows={(data.latestBindings || []).map((b: any) => [b.nickname, formatDate(b.boundAt)])} /></div></div></>}</>;
 }
 
 function SimpleTable({ rows }: { rows: any[][] }) {
@@ -223,7 +261,7 @@ function Customers({ setView }: any) {
   const [search, setSearch] = useState('');
   useEffect(() => { const id = window.setTimeout(() => api(`/api/pharmacy/customers?filter=${filter}&search=${encodeURIComponent(search)}`).then((d) => setItems(d.items)), 300); return () => clearTimeout(id); }, [filter, search]);
   const filters = [['all','全部'],['alert','有预警'],['inactive7d','7 天未记录']] as const;
-  return <><div className="btools"><input className="bsearch" placeholder="搜索客户昵称…" value={search} onChange={(e) => setSearch(e.target.value)} /><div className="itab">{filters.map(([k,n]) => <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{n}</button>)}</div></div><div className="bcard" style={{ padding: '4px 10px' }}><table className="btab"><thead><tr><th>客户</th><th>绑定时间</th><th>最近记录</th><th>指标状态</th><th></th></tr></thead><tbody>{items.map((u) => <tr key={u.userId} className="click" onClick={() => { sessionStorage.setItem('customerId', u.userId); setView('detail'); }}><td><span className="avatar-s">{u.nickname[0]}</span>{u.nickname}</td><td>{u.boundAt.slice(0,10)}</td><td>{u.lastRecordAt ? `${u.lastRecordAt.slice(5,16)} · ${u.lastRecordMetric}` : '—'}</td><td><span className="dotset">{['glucose','bp','lipid','uric'].map((m) => <span key={m} className="sdot" style={{ background: dotColor(u.dots[m]) }} />)}</span></td><td><button className="bbtn sm line">查看</button></td></tr>)}</tbody></table></div></>;
+  return <><div className="btools"><input className="bsearch" placeholder="搜索客户昵称…" value={search} onChange={(e) => setSearch(e.target.value)} /><div className="itab">{filters.map(([k,n]) => <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{n}</button>)}</div></div><div className="bcard" style={{ padding: '4px 10px' }}><table className="btab"><thead><tr><th>客户</th><th>绑定时间</th><th>最近记录</th><th>指标状态</th><th></th></tr></thead><tbody>{items.map((u) => <tr key={u.userId} className="click" onClick={() => { sessionStorage.setItem('customerId', u.userId); setView('detail'); }}><td><span className="avatar-s">{u.nickname[0]}</span>{u.nickname}</td><td>{formatDate(u.boundAt)}</td><td>{u.lastRecordAt ? `${formatDateTime(u.lastRecordAt, { year: false })} · ${u.lastRecordMetric}` : '—'}</td><td><span className="dotset">{['glucose','bp','lipid','uric'].map((m) => <span key={m} className="sdot" style={{ background: dotColor(u.dots[m]) }} />)}</span></td><td><button className="bbtn sm line">查看</button></td></tr>)}</tbody></table></div></>;
 }
 
 function dotColor(k: string | null) { return k ? ({ ok: 'var(--ok)', hi: 'var(--hi)', lo: 'var(--lo)', dhigh: 'var(--danger)', dlow: 'var(--danger)' } as any)[k] : '#D5DDD9'; }
@@ -251,7 +289,7 @@ function CustomerDetail({ setView }: any) {
       });
   }, [id, metric]);
   if (head?.forbidden) return <div className="bcard" style={{ textAlign: 'center', padding: 46 }}>无权查看该客户(可能已解绑)</div>;
-  return <><button className="bbtn sm line" onClick={() => setView('customers')}>‹ 返回列表</button>{head && <div className="bcard"><span className="avatar-s">{head.nickname?.[0]}</span><b>{head.nickname}</b><span className="admin-note"> · 绑定于 {head.boundAt?.slice(0,10)}</span>{head.pendingAlerts > 0 && <span className="alertbar">近 7 天 {head.pendingAlerts} 条异常读数待跟进</span>}</div>}<div className="itab">{metricTabs.map(([k, n]) => <button key={k} className={metric === k ? 'on' : ''} onClick={() => setMetric(k)}>{n}</button>)}</div><StatsPanel metric={metric} stats={stats} records={records} /><div className="bcard"><div className="bh"><span className="t">记录明细</span><span className="more">只读</span></div><table className="btab"><tbody>{records.map((r) => <tr key={r.id}><td>{r.measuredAt.slice(0,16).replace('T',' ')}</td><td className="num" style={{ color: dotColor(r.status.key), fontWeight: 700 }}>{readRecord(r)}</td><td><span className={`pill ${r.status.key === 'ok' ? 'ok' : r.status.key === 'hi' ? 'hi' : 'danger'}`}>{r.status.label}</span></td><td>{r.note || '—'}</td></tr>)}</tbody></table><div className="bfoot">以上数据由客户本人记录并授权查看，仅供健康管理参考，不构成诊疗依据；请勿据此指导用药，医疗问题请建议客户及时就医</div></div></>;
+  return <><button className="bbtn sm line" onClick={() => setView('customers')}>‹ 返回列表</button>{head && <div className="bcard"><span className="avatar-s">{head.nickname?.[0]}</span><b>{head.nickname}</b><span className="admin-note"> · 绑定于 {formatDate(head.boundAt)}</span>{head.pendingAlerts > 0 && <span className="alertbar">近 7 天 {head.pendingAlerts} 条异常读数待跟进</span>}</div>}<div className="itab">{metricTabs.map(([k, n]) => <button key={k} className={metric === k ? 'on' : ''} onClick={() => setMetric(k)}>{n}</button>)}</div><StatsPanel metric={metric} stats={stats} records={records} /><div className="bcard"><div className="bh"><span className="t">记录明细</span><span className="more">只读</span></div><table className="btab"><tbody>{records.map((r) => <tr key={r.id}><td>{formatDateTime(r.measuredAt)}</td><td className="num" style={{ color: dotColor(r.status.key), fontWeight: 700 }}>{readRecord(r)}</td><td><span className={`pill ${r.status.key === 'ok' ? 'ok' : r.status.key === 'hi' ? 'hi' : 'danger'}`}>{r.status.label}</span></td><td>{r.note || '—'}</td></tr>)}</tbody></table><div className="bfoot">以上数据由客户本人记录并授权查看，仅供健康管理参考，不构成诊疗依据；请勿据此指导用药，医疗问题请建议客户及时就医</div></div></>;
 }
 
 function readRecord(r: any) { if (r.metric === 'bp') return `${r.sbp}/${r.dbp}`; if (r.metric === 'uric') return r.value; if (r.metric === 'lipid') return ['tc','tg','ldl','hdl'].map((k) => r[k] ?? '—').join(' / '); return r.displayValue; }
@@ -291,7 +329,7 @@ function Alerts({ showToast }: any) {
   const load = () => api('/api/pharmacy/alerts?days=7&status=all').then((d) => setItems(d.items));
   useEffect(() => { void load(); }, []);
   async function follow(a: any) { await api('/api/pharmacy/alerts/follow-up', { method: 'POST', body: JSON.stringify({ metric: a.metric, recordId: a.record.id, note: '已电话提醒复测' }) }); showToast('已标记跟进'); load(); }
-  return <div className="bcard" style={{ padding: '4px 10px' }}><table className="btab"><thead><tr><th>发生时间</th><th>客户</th><th>指标</th><th>读数</th><th>状态</th><th></th></tr></thead><tbody>{items.map((a) => <tr key={`${a.metric}-${a.record.id}`}><td>{a.occurredAt.slice(0,16).replace('T',' ')}</td><td>{a.customer.nickname}</td><td>{a.metric}</td><td style={{ color: dotColor(a.record.status.key), fontWeight: 700 }}>{readRecord(a.record)}</td><td>{a.followUp ? <span className="pill ok">已跟进</span> : <span className="pill hi">未跟进</span>}</td><td>{!a.followUp && <button className="bbtn sm" onClick={() => follow(a)}>标记跟进</button>}</td></tr>)}</tbody></table></div>;
+  return <div className="bcard" style={{ padding: '4px 10px' }}><table className="btab"><thead><tr><th>发生时间</th><th>客户</th><th>指标</th><th>读数</th><th>状态</th><th></th></tr></thead><tbody>{items.map((a) => <tr key={`${a.metric}-${a.record.id}`}><td>{formatDateTime(a.occurredAt)}</td><td>{a.customer.nickname}</td><td>{a.metric}</td><td style={{ color: dotColor(a.record.status.key), fontWeight: 700 }}>{readRecord(a.record)}</td><td>{a.followUp ? <span className="pill ok">已跟进</span> : <span className="pill hi">未跟进</span>}</td><td>{!a.followUp && <button className="bbtn sm" onClick={() => follow(a)}>标记跟进</button>}</td></tr>)}</tbody></table></div>;
 }
 
 function Invites({ showToast }: any) {
@@ -300,7 +338,7 @@ function Invites({ showToast }: any) {
   const load = () => api('/api/pharmacy/invites').then((d) => setItems(d.items));
   useEffect(() => { void load(); }, []);
   async function create() { const d = await api('/api/pharmacy/invites', { method: 'POST', body: '{}' }); setQr(await QRCode.toDataURL(d.qrContent)); showToast(`邀请码 ${d.code}`); load(); }
-  return <><div className="btools"><button className="bbtn" onClick={create}>＋ 生成邀请码</button></div>{qr && <div className="bcard" style={{ textAlign: 'center' }}><img className="qr" src={qr} /><div className="bfoot">二维码内容为真实绑定链接</div></div>}<div className="bcard" style={{ padding: '4px 10px' }}><table className="btab"><tbody>{items.map((i) => <tr key={i.id}><td className="num" style={{ fontWeight: 700 }}>{i.code}</td><td>{i.createdAt.slice(0,10)}</td><td>{i.boundCount} 人</td><td>{i.disabledAt ? '已停用' : '有效'}</td></tr>)}</tbody></table><div className="bfoot">发展客户时请当面告知：绑定后本药房可查看其健康记录，客户可随时自行解绑</div></div></>;
+  return <><div className="btools"><button className="bbtn" onClick={create}>＋ 生成邀请码</button></div>{qr && <div className="bcard" style={{ textAlign: 'center' }}><img className="qr" src={qr} /><div className="bfoot">二维码内容为真实绑定链接</div></div>}<div className="bcard" style={{ padding: '4px 10px' }}><table className="btab"><tbody>{items.map((i) => <tr key={i.id}><td className="num" style={{ fontWeight: 700 }}>{i.code}</td><td>{formatDate(i.createdAt)}</td><td>{i.boundCount} 人</td><td>{i.disabledAt ? '已停用' : '有效'}</td></tr>)}</tbody></table><div className="bfoot">发展客户时请当面告知：绑定后本药房可查看其健康记录，客户可随时自行解绑</div></div></>;
 }
 
 function Staff({ showToast }: any) {
@@ -319,9 +357,13 @@ function Staff({ showToast }: any) {
     }
   }
   async function toggle(s: any) {
-    await api(`/api/pharmacy/staff/${s.id}`, { method: 'PATCH', body: JSON.stringify({ disabledAt: s.disabledAt ? null : new Date().toISOString() }) });
-    showToast(s.disabledAt ? '已启用员工' : '已停用员工');
-    load();
+    try {
+      await api(`/api/pharmacy/staff/${s.id}`, { method: 'PATCH', body: JSON.stringify({ disabledAt: s.disabledAt ? null : new Date().toISOString() }) });
+      showToast(s.disabledAt ? '已启用员工' : '已停用员工');
+      load();
+    } catch (error: any) {
+      showToast(error.message || '操作失败，请稍后重试');
+    }
   }
   return <><div className="bcard"><div className="bh"><span className="t">新增员工</span></div><div className="staff-form"><input className="bsearch" placeholder="用户名" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /><input className="bsearch" placeholder="姓名" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input className="bsearch" type="password" autoComplete="new-password" placeholder="12 位以上强密码" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /><select className="bsearch" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="staff">店员</option><option value="owner">店长</option></select><button className="bbtn" disabled={!form.username.trim() || !form.name.trim() || !isStrongPassword(form.password)} onClick={create}>新增员工</button></div></div><div className="bcard"><table className="btab"><thead><tr><th>姓名</th><th>用户名</th><th>角色</th><th>状态</th><th></th></tr></thead><tbody>{items.map((s) => <tr key={s.id}><td>{s.name}</td><td>{s.username}</td><td>{s.role === 'owner' ? '店长' : '店员'}</td><td>{s.disabledAt ? <span className="pill danger">停用</span> : <span className="pill ok">在职</span>}</td><td><button className="bbtn sm line" onClick={() => toggle(s)}>{s.disabledAt ? '启用' : '停用'}</button></td></tr>)}</tbody></table></div></>;
 }

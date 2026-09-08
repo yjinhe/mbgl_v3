@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime } from './format';
 
 type Api = (path: string, init?: RequestInit) => Promise<any>;
 type UserSummary = { id: string; nickname: string; adminNote: string; createdAt: string; lastRecordedAt: string | null; totalRecords: number; records7d: number; records30d: number };
@@ -7,8 +8,7 @@ type RecordItem = { id: string; metric: string; measuredAt: string; createdAt: s
 const metricNames: Record<string, string> = { all: '全部指标', glucose: '血糖', bp: '血压', lipid: '血脂', uric: '尿酸' };
 
 function formatTime(value: string | null) {
-  if (!value) return '暂无有效记录';
-  return new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(value));
+  return formatDateTime(value) || '暂无有效记录';
 }
 
 function Pagination({ page, limit, total, loading, change }: { page: number; limit: number; total: number; loading: boolean; change: (page: number) => void }) {

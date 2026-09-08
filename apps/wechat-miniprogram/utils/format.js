@@ -52,7 +52,11 @@ function toTimeInput(date = new Date()) {
 }
 
 function toIsoFromInputs(dateValue, timeValue) {
-  return new Date(`${dateValue}T${timeValue || '00:00'}:00`).toISOString();
+  // Build the date from its parts so the picker values are interpreted in the
+  // device's local time zone; a timezone-less ISO string is parsed as UTC.
+  const [year, month, day] = String(dateValue || '').split('-').map(Number);
+  const [hour, minute] = String(timeValue || '00:00').split(':').map(Number);
+  return new Date(year, month - 1, day, hour || 0, minute || 0, 0).toISOString();
 }
 
 module.exports = {

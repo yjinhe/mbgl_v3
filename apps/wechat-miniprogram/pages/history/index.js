@@ -6,7 +6,7 @@ const {
   markPageFresh,
   markRecordsChanged
 } = require('../../utils/data-cache');
-const { ensureLogin, decorateRecord, fetchMe } = require('../../utils/page');
+const { ensureLogin, decorateRecord, fetchMe, friendlyErrorMessage, handleRequestError } = require('../../utils/page');
 const { demoRecords } = require('../../utils/demo');
 const { metrics } = require('../../utils/metrics');
 const { setRecordEdit, setRecordReturnPath, syncTabBar } = require('../../utils/tabbar');
@@ -60,6 +60,7 @@ Page({
     const loadSeq = (this._loadSeq || 0) + 1;
     this._loadSeq = loadSeq;
     this.setData(Object.assign({ loading: true, error: '' }, reset ? { records: [], hasRecords: false, nextCursor: null } : {}));
+    let requestToken = '';
     try {
       if (!(await ensureLogin(this))) {
         if (loadSeq !== this._loadSeq || metric !== this.data.metric || !isDataLeaseCurrent(lease, getToken())) return;
@@ -68,6 +69,7 @@ Page({
         this.markDataFresh(metric);
         return;
       }
+      requestToken = getToken();
       this.setData({ loading: true });
       const query = cursor ? `?limit=50&cursor=${encodeURIComponent(cursor)}` : '?limit=50';
       const [res, me] = await Promise.all([
@@ -82,7 +84,8 @@ Page({
       this.markDataFresh(metric);
     } catch (error) {
       if (loadSeq === this._loadSeq && metric === this.data.metric && isDataLeaseCurrent(lease, getToken())) {
-        this.setData({ error: error.message || '加载失败，请重试' });
+        if (handleRequestError(this, error, requestToken)) return;
+        this.setData({ error: friendlyErrorMessage(error, '加载失败，请重试') });
       }
     } finally {
       if (loadSeq === this._loadSeq) this.setData({ loading: false });

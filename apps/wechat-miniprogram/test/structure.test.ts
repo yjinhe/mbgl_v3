@@ -223,7 +223,8 @@ describe('wechat miniprogram structure', () => {
     const homeWxml = fs.readFileSync(path.join(root, 'pages/home/index.wxml'), 'utf8');
     const mineWxml = fs.readFileSync(path.join(root, 'pages/mine/index.wxml'), 'utf8');
 
-    expect(privacyJs).toContain("CONSENT_VERSION = '2026-08-19'");
+    expect(privacyJs).toContain("CONSENT_VERSION = '2026-09-05'");
+    expect(fs.readFileSync(path.join(root, 'pages/legal/privacy/index.wxml'), 'utf8')).toContain('更新及生效日期：2026 年 9 月 5 日');
     expect(privacyJs).toContain('wx.getPrivacySetting');
     expect(privacyJs).toContain('wx.requirePrivacyAuthorize');
     expect(privacyJs).toContain('wx.openPrivacyContract');

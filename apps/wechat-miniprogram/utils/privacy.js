@@ -1,5 +1,7 @@
 const CONSENT_KEY = 'tangji_privacy_consent';
-const CONSENT_VERSION = '2026-08-19';
+// Must match the effective date shown in pages/legal/privacy/index.wxml
+// (更新及生效日期). Bumping it asks every device to confirm the policy again.
+const CONSENT_VERSION = '2026-09-05';
 let consentLoaded = false;
 let consentCache = false;
 

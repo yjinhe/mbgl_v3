@@ -102,6 +102,25 @@ describe('reliable recording and comparable statistics', () => {
     expect(summaries[0]!.date).toBe(localDayKey(changedTime));
   });
 
+  test('partial edits keep pulse and tags, while explicit null still clears pulse', async () => {
+    const { user, headers } = await account('partial-edit');
+    const measuredAt = new Date(Date.now() - 60_000).toISOString();
+    const created = await app.inject({ method: 'POST', url: '/api/app/records/bp', headers, payload: { sbp: 128, dbp: 82, pulse: 76, period: 'morning', measuredAt, tags: ['运动后'], note: '晨起' } });
+    expect(created.statusCode).toBe(201);
+    const url = `/api/app/records/bp/${created.json().record.id}`;
+    const partial = await app.inject({ method: 'PATCH', url, headers, payload: { sbp: 132, dbp: 84 } });
+    expect(partial.statusCode).toBe(200);
+    expect(partial.json().record).toMatchObject({ sbp: 132, dbp: 84, pulse: 76, tags: ['运动后'], note: '晨起', period: 'morning' });
+    const stored = await prisma.bpRecord.findUniqueOrThrow({ where: { id: created.json().record.id } });
+    expect(stored.pulse).toBe(76);
+    expect(stored.tags).toBe(JSON.stringify(['运动后']));
+    expect(stored.measuredAt.toISOString()).toBe(new Date(measuredAt).toISOString());
+    expect((await prisma.bpRecord.count({ where: { userId: user.id } }))).toBe(1);
+    const cleared = await app.inject({ method: 'PATCH', url, headers, payload: { sbp: 132, dbp: 84, pulse: null, tags: [] } });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().record).toMatchObject({ pulse: null, tags: [] });
+  });
+
   test('glucose statistics filter exact periods, exclude future/deleted/out-of-range rows and retain all points', async () => {
     const { user, headers } = await account('period-stats');
     const now = new Date();

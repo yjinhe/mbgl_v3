@@ -1,6 +1,6 @@
 const { getToken, request } = require('../../utils/api');
 const { captureDataLease, isDataLeaseCurrent, markRecordsChanged } = require('../../utils/data-cache');
-const { decorateRecord, doLogin, ensureLogin, fetchMe } = require('../../utils/page');
+const { decorateRecord, doLogin, ensureLogin, fetchMe, friendlyErrorMessage, handleRequestError } = require('../../utils/page');
 
 Page({
   data: {
@@ -25,7 +25,8 @@ Page({
 
   async load() {
     if (!(await ensureLogin(this))) return;
-    const lease = captureDataLease(getToken(), ['records', 'profile']);
+    const requestToken = getToken();
+    const lease = captureDataLease(requestToken, ['records', 'profile']);
     try {
       this.setData({ loading: true });
       const [res, me] = await Promise.all([
@@ -37,7 +38,9 @@ Page({
       const items = (res.items || []).map((item) => decorateRecord(item.metric, item, unit));
       this.setData({ items, hasItems: items.length > 0 });
     } catch (error) {
-      wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+      if (!isDataLeaseCurrent(lease, getToken())) return;
+      if (handleRequestError(this, error, requestToken)) return;
+      wx.showToast({ title: friendlyErrorMessage(error, '加载失败'), icon: 'none' });
     } finally {
       this.setData({ loading: false });
     }

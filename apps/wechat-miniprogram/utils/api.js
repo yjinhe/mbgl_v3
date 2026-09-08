@@ -105,7 +105,7 @@ function loginWithWechat() {
           if (!loginRes.code) {
             throw new Error(loginRes.errMsg || 'wx.login 未返回 code');
           }
-          const code = loginRes.code || 'seed_demo';
+          const code = loginRes.code;
           const data = await request('/api/app/auth/wechat', {
             method: 'POST',
             data: { code }

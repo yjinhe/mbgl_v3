@@ -35,7 +35,7 @@ function loadRecordDefinition(overrides: Record<string, unknown> = {}) {
       markPageFresh: () => true,
       markRecordsChanged: vi.fn()
     },
-    '../../utils/page': { loadMe: vi.fn(async () => null), promptLoginForAction: vi.fn() },
+    '../../utils/page': { loadMe: vi.fn(async () => null), promptLoginForAction: vi.fn(), handleRequestError: () => false, friendlyErrorMessage: (error: any, fallback: string) => error.message || fallback },
     '../../utils/demo': { demoMe: { unit: 'mmol', sex: 'male' } },
     '../../utils/record-draft': loadCommonJs(path.join(root, 'utils/record-draft.js')),
     '../../utils/format': {
@@ -244,7 +244,7 @@ describe('wechat record flow', () => {
     const request = vi.fn().mockRejectedValue(new Error('网络连接中断'));
     const overrides = {
       '../../utils/api': { getToken: () => 'token-a', request },
-      '../../utils/page': { loadMe: async () => ({ id: 'user-a', unit: 'mmol' }), promptLoginForAction: vi.fn() }
+      '../../utils/page': { loadMe: async () => ({ id: 'user-a', unit: 'mmol' }), promptLoginForAction: vi.fn(), handleRequestError: () => false, friendlyErrorMessage: (error: any, fallback: string) => error.message || fallback }
     };
     const page = createRecordPage(overrides);
     await page.onShow();
@@ -270,7 +270,7 @@ describe('wechat record flow', () => {
     const request = vi.fn().mockResolvedValue({});
     const overrides = {
       '../../utils/api': { getToken: () => 'token-a', request },
-      '../../utils/page': { loadMe: async () => ({ id: 'user-a', unit: 'mmol' }), promptLoginForAction: vi.fn() }
+      '../../utils/page': { loadMe: async () => ({ id: 'user-a', unit: 'mmol' }), promptLoginForAction: vi.fn(), handleRequestError: () => false, friendlyErrorMessage: (error: any, fallback: string) => error.message || fallback }
     };
     const page = createRecordPage(overrides);
     await page.onShow();
@@ -288,7 +288,7 @@ describe('wechat record flow', () => {
     const other = createRecordPage({
       ...overrides,
       '../../utils/api': { getToken: () => 'token-b', request },
-      '../../utils/page': { loadMe: async () => ({ id: 'user-b', unit: 'mmol' }), promptLoginForAction: vi.fn() }
+      '../../utils/page': { loadMe: async () => ({ id: 'user-b', unit: 'mmol' }), promptLoginForAction: vi.fn(), handleRequestError: () => false, friendlyErrorMessage: (error: any, fallback: string) => error.message || fallback }
     });
     await other.onShow();
     other.setMetricValue('bp');
@@ -299,7 +299,7 @@ describe('wechat record flow', () => {
     const request = vi.fn().mockResolvedValue({});
     const page = createRecordPage({
       '../../utils/api': { getToken: () => 'token-a', request },
-      '../../utils/page': { loadMe: async () => ({ id: 'user-a', unit: 'mmol' }), promptLoginForAction: vi.fn() }
+      '../../utils/page': { loadMe: async () => ({ id: 'user-a', unit: 'mmol' }), promptLoginForAction: vi.fn(), handleRequestError: () => false, friendlyErrorMessage: (error: any, fallback: string) => error.message || fallback }
     });
     await page.onShow();
     page.setData({ value: '6.8', note: '未保存的新记录' });

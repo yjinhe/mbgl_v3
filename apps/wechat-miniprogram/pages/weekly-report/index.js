@@ -1,6 +1,6 @@
 const { getToken, request } = require('../../utils/api');
 const { captureDataLease, isDataLeaseCurrent } = require('../../utils/data-cache');
-const { ensureLogin, fetchMe } = require('../../utils/page');
+const { ensureLogin, fetchMe, friendlyErrorMessage, handleRequestError } = require('../../utils/page');
 const { demoMe, demoRecords } = require('../../utils/demo');
 const { metrics } = require('../../utils/metrics');
 const { ensurePlatformPrivacyAuthorization } = require('../../utils/privacy');
@@ -33,12 +33,14 @@ Page({
     this._images = {};
     this._pages = [];
     this.setData({ loading: true, error: '', imageError: '', imagePath: '', pageCount: 0, totalRecords: 0 });
+    let requestToken = '';
     try {
       const authed = await ensureLogin(this);
       this.setData({ authed, loading: true });
       let report;
       let me;
       if (authed) {
+        requestToken = getToken();
         [report, me] = await Promise.all([request('/api/app/report/weekly'), fetchMe()]);
       } else {
         const now = new Date();
@@ -52,7 +54,9 @@ Page({
       this.setData({ rangeText: result.rangeText, totalRecords: result.totalRecords, pageCount: result.pages.length, pageIndex: 0 });
       if (result.pages.length) await this.renderCurrent();
     } catch (error) {
-      if (this.isCurrent(seq)) this.setData({ error: error.message || '记录加载失败，请稍后重试' });
+      if (!this.isCurrent(seq)) return;
+      if (handleRequestError(this, error, requestToken)) return;
+      this.setData({ error: friendlyErrorMessage(error, '记录加载失败，请稍后重试') });
     } finally {
       if (!this._unloaded && seq === this._loadSeq) this.setData({ loading: false });
     }
