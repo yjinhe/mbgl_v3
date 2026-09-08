@@ -10,10 +10,11 @@ export function inferBpPeriod(value: Date | string): BpPeriod {
 }
 
 export function bpStatus(sbp: number, dbp: number): Status {
+  // High readings take priority: a low value in one component must not mask an elevated one (e.g. 165/55).
+  if (sbp >= 160 || dbp >= 100) return { key: 'dhigh', label: '明显偏高' };
+  if (sbp >= 135 || dbp >= 85) return { key: 'hi', label: '偏高' };
   if (sbp < 90 || dbp < 60) return { key: 'dlow', label: '偏低' };
-  if (sbp < 135 && dbp < 85) return { key: 'ok', label: '正常' };
-  if (sbp < 160 && dbp < 100) return { key: 'hi', label: '偏高' };
-  return { key: 'dhigh', label: '明显偏高' };
+  return { key: 'ok', label: '正常' };
 }
 
 export function validateBp(input: {

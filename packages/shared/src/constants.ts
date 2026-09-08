@@ -58,6 +58,7 @@ export const STATUS_LABELS = {
     dhigh: '明显偏高'
   },
   lipid: {
+    lo: '偏低',
     ok: '合适',
     hi: '边缘升高',
     dhigh: '升高'

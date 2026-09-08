@@ -107,7 +107,10 @@ describe('blood pressure rules', () => {
     [134, 85, 'hi'],
     [159, 99, 'hi'],
     [160, 99, 'dhigh'],
-    [159, 100, 'dhigh']
+    [159, 100, 'dhigh'],
+    [165, 55, 'dhigh'],
+    [140, 55, 'hi'],
+    [85, 55, 'dlow']
   ] as const)('classifies %s/%s as %s', (sbp, dbp, key) => {
     expect(validateBp({ sbp, dbp }).status?.key).toBe(key);
   });
@@ -151,13 +154,16 @@ describe('lipid rules', () => {
     ['ldl', 4.09, 'hi'],
     ['ldl', 4.1, 'dhigh'],
     ['hdl', 1.0, 'ok'],
-    ['hdl', 0.99, 'hi']
+    ['hdl', 0.99, 'lo']
   ] as const)('classifies %s %s as %s', (item, value, key) => {
     expect(lipidStatus(item, value).key).toBe(key);
   });
 
   test('chooses overall worst status and rejects all-empty lipid body', () => {
     expect(lipidOverallStatus({ tc: 4.8, tg: 1.2, ldl: 4.2, hdl: 1.2 }).key).toBe('dhigh');
+    expect(lipidOverallStatus({ tc: 4.8, hdl: 0.9 })).toEqual({ key: 'lo', label: '偏低' });
+    expect(lipidOverallStatus({ tc: 5.5, hdl: 0.9 }).key).toBe('hi');
+    expect(lipidStatus('hdl', 0.9).label).toBe('偏低');
     expect(validateLipid({}).ok).toBe(false);
     expect(validateLipid({ tg: 1.2 }).ok).toBe(true);
   });

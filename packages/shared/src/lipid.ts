@@ -4,7 +4,7 @@ export type LipidItem = 'tc' | 'tg' | 'ldl' | 'hdl';
 
 export function lipidStatus(item: LipidItem, value: number): Status {
   if (item === 'hdl') {
-    return value >= 1.0 ? { key: 'ok', label: '合适' } : { key: 'hi', label: '偏低' };
+    return value >= 1.0 ? { key: 'ok', label: '合适' } : { key: 'lo', label: '偏低' };
   }
   const thresholds = {
     tc: [5.2, 6.2],
@@ -18,7 +18,7 @@ export function lipidStatus(item: LipidItem, value: number): Status {
 }
 
 export function lipidOverallStatus(values: LipidValues): Status {
-  const order = { ok: 0, hi: 1, dhigh: 2 };
+  const order = { ok: 0, lo: 1, hi: 2, dhigh: 3 };
   let worst: Status = { key: 'ok', label: '合适' };
   for (const item of ['tc', 'tg', 'ldl', 'hdl'] as const) {
     const value = values[item];
