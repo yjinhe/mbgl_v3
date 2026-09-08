@@ -31,6 +31,40 @@ const appOrigin = env('APP_ORIGIN', corsOrigins.find((origin) => origin.includes
 const wechatWebRedirectUri = env('WECHAT_WEB_REDIRECT_URI', appOrigin);
 const trustProxyHops = integerEnv('TRUST_PROXY_HOPS', isProduction ? 1 : 0, 0, 5);
 
+export interface ReminderTemplate {
+  id: string;
+  /** Template field keys in message order, copied from the WeChat template detail page. */
+  fields: string[];
+}
+
+export type MiniprogramState = 'formal' | 'trial' | 'developer';
+
+const MINIPROGRAM_STATES: readonly MiniprogramState[] = ['formal', 'trial', 'developer'];
+
+function templateEnv(idName: string, fieldsName: string, fallbackFields: string, expectedCount: number): ReminderTemplate | undefined {
+  const id = optionalEnv(idName);
+  const fields = (process.env[fieldsName]?.trim() || fallbackFields).split(',').map((field) => field.trim()).filter(Boolean);
+  if (!id) return undefined;
+  if (fields.length !== expectedCount || new Set(fields).size !== fields.length) {
+    throw new Error(`${fieldsName} must list exactly ${expectedCount} distinct template field keys in message order, e.g. "${fallbackFields}"`);
+  }
+  return { id, fields };
+}
+
+function miniprogramStateEnv(): MiniprogramState {
+  const value = env('WECHAT_MINIPROGRAM_STATE', 'formal').trim();
+  if (!MINIPROGRAM_STATES.includes(value as MiniprogramState)) {
+    throw new Error('WECHAT_MINIPROGRAM_STATE must be one of formal, trial, developer');
+  }
+  return value as MiniprogramState;
+}
+
+const reminderTemplates = {
+  glucose: templateEnv('WECHAT_TEMPLATE_GLUCOSE_REMINDER', 'WECHAT_TEMPLATE_GLUCOSE_FIELDS', 'time1,thing2,thing3', 3),
+  bp: templateEnv('WECHAT_TEMPLATE_BP_REMINDER', 'WECHAT_TEMPLATE_BP_FIELDS', 'time1,thing2', 2)
+};
+const miniprogramState = miniprogramStateEnv();
+
 if (isProduction && (jwtSecret.includes('change-me') || jwtSecret.length < 32)) {
   throw new Error('JWT_SECRET must be a production secret with at least 32 characters');
 }
@@ -66,6 +100,8 @@ export const config = {
   wechatWebSecret,
   wechatWebRedirectUri,
   trustProxyHops,
+  reminderTemplates,
+  miniprogramState,
   globalRateLimit: integerEnv('GLOBAL_RATE_LIMIT', 300, 30, 5000),
   exportMaxRecords: integerEnv('EXPORT_MAX_RECORDS', 10000, 100, 100000),
   logLevel: env('LOG_LEVEL', isProduction ? 'info' : 'warn'),

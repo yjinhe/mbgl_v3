@@ -72,6 +72,21 @@ async function ensureDevSchemaUpgrades() {
     FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
   )`);
   await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "RecordSubmission_userId_key_key" ON "RecordSubmission"("userId", "key")');
+  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "ReminderPlan" (
+    "id" TEXT NOT NULL PRIMARY KEY, "userId" TEXT NOT NULL, "metric" TEXT NOT NULL,
+    "enabled" BOOLEAN NOT NULL DEFAULT false, "time" TEXT NOT NULL, "period" TEXT,
+    "quota" INTEGER NOT NULL DEFAULT 0, "lastSentDay" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME NOT NULL,
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`);
+  await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "ReminderPlan_userId_metric_key" ON "ReminderPlan"("userId", "metric")');
+  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "ReminderLog" (
+    "id" TEXT NOT NULL PRIMARY KEY, "userId" TEXT NOT NULL, "metric" TEXT NOT NULL,
+    "templateKey" TEXT NOT NULL, "scheduledDay" TEXT NOT NULL,
+    "sentAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "ok" BOOLEAN NOT NULL,
+    "errcode" INTEGER, "errmsg" TEXT
+  )`);
+  await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "ReminderLog_userId_scheduledDay_idx" ON "ReminderLog"("userId", "scheduledDay")');
   await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "User_loginName_key" ON "User"("loginName")');
   await migrateLegacyDemoIdentity();
   await ensureDevWebAccount();

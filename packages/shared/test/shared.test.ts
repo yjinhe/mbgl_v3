@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import {
+  BP_REMINDER_NOTE,
   DEFAULT_GLUCOSE_TARGET,
+  GLUCOSE_PERIODS,
   GLUCOSE_PERIOD_MAP,
+  REMINDER_TIPS,
   bpSafetyAlert,
   displayGlucose,
   glucoseSafetyAlert,
@@ -206,5 +209,17 @@ describe('cross metric streak', () => {
         new Date('2026-06-12T10:00:00+08:00')
       )
     ).toBe(4);
+  });
+});
+
+describe('measurement reminder copy', () => {
+  test('every glucose period has a tip that fits a 20-character template field', () => {
+    for (const period of GLUCOSE_PERIODS) {
+      const tip = REMINDER_TIPS[period.key];
+      expect(tip.length).toBeGreaterThan(0);
+      expect(tip.length).toBeLessThanOrEqual(20);
+    }
+    expect(Object.keys(REMINDER_TIPS)).toHaveLength(GLUCOSE_PERIODS.length);
+    expect(BP_REMINDER_NOTE.length).toBeLessThanOrEqual(20);
   });
 });

@@ -26,6 +26,15 @@ import {
   type ResolvedWechatIdentity
 } from '../services/wechat.js';
 import { recycleCutoff, recycleDaysLeft } from '../services/recycle.js';
+import {
+  REMINDER_TIME_PATTERN,
+  addSubscriptionQuota,
+  deleteUserReminders,
+  listPlans,
+  miniOpenidOf,
+  serializePlan,
+  upsertPlan
+} from '../services/reminders.js';
 import { hashPassword, verifyPassword } from '../services/password.js';
 import { inferBpPeriod, inferGlucosePeriod, localDayKey, validateGlucoseTarget, type GlucosePeriod, type Metric } from '@tangji/shared';
 
@@ -47,6 +56,15 @@ const pageQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(100)
 });
+const reminderMetricSchema = z.enum(['glucose', 'bp']);
+const reminderPlanSchema = z.object({
+  enabled: z.boolean(),
+  time: z.string().regex(REMINDER_TIME_PATTERN, '提醒时间不正确').optional(),
+  period: z.string().min(1).optional()
+}).strict();
+const reminderSubscriptionsSchema = z.object({
+  accepted: z.array(reminderMetricSchema).max(10)
+}).strict();
 
 async function currentUser(app: FastifyInstance, auth: AppToken) {
   const user = await app.prisma.user.findUnique({ where: { id: auth.userId } });
@@ -318,12 +336,51 @@ export async function appRoutes(app: FastifyInstance) {
       await tx.bpRecord.deleteMany({ where: { userId: user.id } });
       await tx.lipidRecord.deleteMany({ where: { userId: user.id } });
       await tx.uricRecord.deleteMany({ where: { userId: user.id } });
+      await deleteUserReminders(tx, user.id);
       await tx.user.update({
         where: { id: user.id },
         data: { deactivatedAt: new Date(), nickname: '已注销用户', adminNote: '', avatarUrl: null, sex: null }
       });
     }, { timeout: 30_000 });
     return reply.code(204).send();
+  });
+
+  app.get('/reminders', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request) => {
+    const user = await currentUser(app, request.auth as AppToken);
+    const plans = await listPlans(app.prisma, user.id);
+    // Template ids come from server config so the mini program never hardcodes them; unconfigured metrics are omitted.
+    const templates: { glucose?: string; bp?: string } = {};
+    if (config.reminderTemplates.glucose) templates.glucose = config.reminderTemplates.glucose.id;
+    if (config.reminderTemplates.bp) templates.bp = config.reminderTemplates.bp.id;
+    return { plans: plans.map(serializePlan), templates };
+  });
+
+  app.put('/reminders/:metric', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const metric = reminderMetricSchema.parse((request.params as any).metric);
+    const body = reminderPlanSchema.parse(request.body);
+    if (metric === 'bp' && body.period !== undefined) return validationError(reply, '血压提醒不需要测量时段');
+    if (body.period !== undefined && !GLUCOSE_PERIODS.has(body.period)) return validationError(reply, '测量时段不正确');
+    const user = await currentUser(app, request.auth as AppToken);
+    // Subscribe messages are addressed to a mini-program openid (see miniOpenidOf): accounts that only ever logged in
+    // on the web or with a password have none, so they cannot hold a reminder plan.
+    if (!miniOpenidOf(user)) {
+      return reply.code(422).send({ error: { code: 'MINIPROGRAM_REQUIRED', message: '请在小程序中开启测量提醒' } });
+    }
+    const plan = await upsertPlan(app.prisma, user.id, metric, body);
+    return { plan: serializePlan(plan) };
+  });
+
+  app.post('/reminders/subscriptions', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
+  }, async (request) => {
+    const body = reminderSubscriptionsSchema.parse(request.body);
+    const user = await currentUser(app, request.auth as AppToken);
+    const plans = await addSubscriptionQuota(app.prisma, user.id, body.accepted);
+    return { plans: plans.map(serializePlan) };
   });
 
   app.get('/overview', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request) => {

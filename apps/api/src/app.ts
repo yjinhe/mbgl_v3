@@ -42,7 +42,7 @@ export async function buildApp(options: { prisma?: PrismaClient } = {}) {
     timeWindow: '1 minute'
   });
   await app.register(cors, {
-    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     origin(origin, callback) {
       callback(null, !origin || config.corsOrigins.includes(origin));
     }

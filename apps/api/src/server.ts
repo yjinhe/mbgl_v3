@@ -2,6 +2,7 @@ import { buildApp } from './app.js';
 import { config } from './env.js';
 import cron from 'node-cron';
 import { purgeExpiredRecords } from './services/recycle.js';
+import { remindersConfigured, runReminderTick } from './services/reminders.js';
 
 const app = await buildApp();
 await app.listen({ port: config.port, host: '0.0.0.0' });
@@ -22,9 +23,31 @@ const cleanupTask = cron.schedule('10 3 * * *', () => void cleanupRecycleBin(), 
 });
 void cleanupRecycleBin();
 
+async function sendMeasurementReminders() {
+  try {
+    const result = await runReminderTick(app.prisma, { now: new Date(), fetch, config, log: app.log });
+    if (result.due > 0) app.log.info(result, 'Measurement reminder tick completed');
+  } catch (error) {
+    app.log.error({ err: error }, 'Measurement reminder tick failed');
+  }
+}
+
+// Spec §6: every 5 minutes in Asia/Shanghai. Skipped entirely (one warning) until the mini-program credentials and at
+// least one subscribe-message template are configured.
+let reminderTask: ReturnType<typeof cron.schedule> | null = null;
+if (remindersConfigured(config)) {
+  reminderTask = cron.schedule('*/5 * * * *', () => void sendMeasurementReminders(), {
+    timezone: 'Asia/Shanghai',
+    noOverlap: true
+  });
+} else {
+  app.log.warn('Measurement reminders disabled: set WECHAT_APPID/WECHAT_SECRET and WECHAT_TEMPLATE_GLUCOSE_REMINDER or WECHAT_TEMPLATE_BP_REMINDER');
+}
+
 async function shutdown(signal: string) {
   app.log.info({ signal }, 'Shutting down');
   cleanupTask.stop();
+  reminderTask?.stop();
   await app.close();
   process.exit(0);
 }

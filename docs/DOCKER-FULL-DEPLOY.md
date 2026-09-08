@@ -41,6 +41,10 @@ WEB_ORIGIN=https://app.example.com,https://console.example.com
 
 如果同时启用小程序和公众号登录，两者必须绑定到同一个微信开放平台账号。API 会用 `UnionID` 合并微信身份；未返回 `UnionID` 时登录会失败，避免账号被静默拆分。
 
+### 小程序测量提醒（可选）
+
+测量提醒通过微信一次性订阅消息下发（规格见 `docs/WECHAT-REMINDER-SPEC.md`），依赖 `WECHAT_APPID/WECHAT_SECRET`。在 `.env.docker` 中填入 `WECHAT_TEMPLATE_GLUCOSE_REMINDER` 与 `WECHAT_TEMPLATE_BP_REMINDER`（公众平台「我的模板」里的模板 ID）后，API 每 5 分钟（东八区）扫描到点计划并发送。`WECHAT_TEMPLATE_GLUCOSE_FIELDS`（默认 `time1,thing2,thing3`，顺序为测量时间、测量时段、温馨提示）和 `WECHAT_TEMPLATE_BP_FIELDS`（默认 `time1,thing2`，顺序为提醒时间、备注）是模板字段 key，**待确认：从公众平台「订阅消息 → 我的模板 → 详情」抄录**；字段数量不对时 API 启动即报错，key 写错时发送会返回 errcode 47003。体验版联调期间把 `WECHAT_MINIPROGRAM_STATE` 设为 `trial`，验证收到消息后改回 `formal`。模板 ID 留空时提醒功能整体关闭，小程序会隐藏相关入口，其余功能不受影响。
+
 ```env
 WECHAT_MOCK=false
 SEED_ON_BOOT=false
