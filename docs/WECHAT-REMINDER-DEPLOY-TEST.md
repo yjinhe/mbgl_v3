@@ -123,7 +123,6 @@ curl -s -H "Authorization: Bearer <token>" https://tangji.aiteam.pw/api/app/remi
    ```
 2. 再次执行 §3 的发布后检查。
 3. 小程序提交审核，审核备注在原有说明基础上补充：「新增用户主动订阅的测量提醒与服药提醒，使用一次性订阅消息，每次授权仅发送一条；常用药由用户自行输入，不含药品信息库，不提供用药建议，不含诊疗建议。」
-4. 更新 `docs/DOCKER-FULL-DEPLOY.md` §「小程序测量提醒」中「待确认」字样，把实际字段 key 写进去，提交 PR。
 
 ## 7. 排查
 
