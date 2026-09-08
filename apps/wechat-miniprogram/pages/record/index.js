@@ -14,9 +14,26 @@ const {
   consumeRecordMetric,
   consumeRecordEdit,
   consumeRecordReturnPath,
+  setRecordMetric,
   setRecordReturnPath,
   syncTabBar
 } = require('../../utils/tabbar');
+const {
+  dismissOffer,
+  enabledPlanText,
+  enabledTemplateMetrics,
+  hasTemplates,
+  loadReminders,
+  offerQuestion,
+  planFor,
+  reminderErrorMessage,
+  reportSubscriptions,
+  requestSubscribe,
+  roundToFiveMinutes,
+  savePlan,
+  templateMetrics,
+  wasOfferDismissed
+} = require('../../utils/reminders');
 const {
   bpPeriods,
   bpStatus,
@@ -119,13 +136,37 @@ Page({
     toastOn: '',
     sheetOn: 'on',
     maskOn: 'on',
+    reminderOffer: null,
+    reminderOfferBusy: false,
     navStyle: ''
   },
 
-  onLoad() {
+  onLoad(options = {}) {
     this._metricDrafts = Object.create(null);
     this._sessionToken = getToken();
+    this._reminders = null;
+    this.applyLaunchOptions(options || {});
     this.setData({ navStyle: getApp().globalData.navStyle });
+  },
+
+  // A subscribe message deep link opens `pages/record/index?metric=bp&period=morning`
+  // (spec §3.3). Reuse the tab navigation intent so onShow selects the metric,
+  // and keep the period until the form has been initialised.
+  applyLaunchOptions(options) {
+    const metric = String(options.metric || '');
+    if (!metrics.some((item) => item.key === metric)) return;
+    setRecordMetric(metric);
+    const period = String(options.period || '');
+    const allowed = metric === 'glucose' ? glucosePeriods : (metric === 'bp' ? bpPeriods : []);
+    this._presetPeriod = allowed.includes(period) ? { metric, period } : null;
+  },
+
+  applyPresetPeriod() {
+    const preset = this._presetPeriod;
+    if (!preset) return;
+    this._presetPeriod = null;
+    if (preset.metric !== this.data.metric) return;
+    this.applyPeriod(preset.period);
   },
 
   async onShow() {
@@ -137,16 +178,19 @@ Page({
       this._draftOwner = '';
       this._activeMetric = '';
       this._formInitialized = false;
-      this.setData({ authed: false, me: null, editingId: '', draftNotice: '' });
+      this._reminders = null;
+      this.setData({ authed: false, me: null, editingId: '', draftNotice: '', reminderOffer: null });
     }
     const edit = consumeRecordEdit(token);
     const selected = consumeRecordMetric();
     if (!this._formInitialized || selected) {
       this._formInitialized = true;
       this.setMetricValue(selected || this.data.metric);
+      this.applyPresetPeriod();
     } else if (!this.hasDraft()) {
       this.refreshEmptyDraftTime();
     }
+    this.syncReminderState();
     if (this.isProfileFresh()) {
       if (edit) this.beginEdit(edit);
       return;
@@ -188,6 +232,8 @@ Page({
 
   onHide() {
     this.persistDraft();
+    // The "已开启" confirmation only needs to be seen once.
+    if (this.data.reminderOffer && this.data.reminderOffer.done) this.setData({ reminderOffer: null });
   },
 
   onUnload() {
@@ -702,7 +748,10 @@ Page({
 
   setPeriod(event) {
     if (this.data.saving) return;
-    const period = event.currentTarget.dataset.period;
+    this.applyPeriod(event.currentTarget.dataset.period);
+  },
+
+  applyPeriod(period) {
     const periodRecommended = period === this.data.recommendedPeriod;
     this.setData({
       period,
@@ -819,6 +868,9 @@ Page({
 
   async save() {
     if (this.data.saving) return;
+    // Spec §3.2: ask for tomorrow's reminder quota synchronously inside the
+    // tap, before any await; WeChat refuses the dialog from async code.
+    const subscribing = this.requestReminderQuota();
     const saveToken = getToken();
     let pendingRecord = null;
     try {
@@ -879,12 +931,19 @@ Page({
       if (!isDataLeaseCurrent(lease, getToken())) return;
       markRecordsChanged();
       const presentation = this.savedRecordPresentation(metric, data, result && result.record);
+      const savedTime = this.data.timeValue;
+      const savedPeriod = this.data.period;
       if (editingId) this.finishEditing();
       else {
         this.setMetricValue(metric, { reset: true });
         this.setData({ draftNotice: '' });
         this.persistDraft();
       }
+      // Let the subscription dialog settle before the success modal, then
+      // report accepted quota. Neither can fail the save.
+      await this.settleReminderSubscription(subscribing);
+      if (!editingId) await this.offerReminder(metric, savedTime, savedPeriod);
+      if (saveToken !== getToken()) return;
       this.showSaveSuccess(presentation, result && result.safetyAlert, Boolean(editingId));
     } catch (error) {
       if (saveToken !== getToken()) return;
@@ -947,6 +1006,103 @@ Page({
       },
       fail: () => this.showToast('记录已保存')
     });
+  },
+
+  // Loads the reminder plans/templates for the logged-in user (cached in
+  // utils/reminders). Also withdraws a pending offer once the metric's plan is
+  // enabled elsewhere or the templates disappear.
+  syncReminderState() {
+    const token = getToken();
+    if (!token) {
+      this._reminders = null;
+      if (this.data.reminderOffer) this.setData({ reminderOffer: null });
+      return Promise.resolve(null);
+    }
+    return loadReminders().then((state) => {
+      if (getToken() !== token) return null;
+      this._reminders = state;
+      const offer = this.data.reminderOffer;
+      if (offer && !offer.done) {
+        const plan = planFor(state, offer.metric);
+        if (!state.templates[offer.metric] || plan.enabled) this.setData({ reminderOffer: null });
+      }
+      return state;
+    }).catch(() => null);
+  },
+
+  // Synchronous: must be the first thing in the save tap handler.
+  requestReminderQuota() {
+    const state = this._reminders;
+    if (!this.data.authed || !state) return Promise.resolve({ accepted: [] });
+    const wanted = enabledTemplateMetrics(state);
+    if (!wanted.length) return Promise.resolve({ accepted: [] });
+    return requestSubscribe(state.templates, wanted);
+  },
+
+  async settleReminderSubscription(subscribing) {
+    try {
+      const result = await subscribing;
+      const accepted = result && Array.isArray(result.accepted) ? result.accepted : [];
+      if (accepted.length) reportSubscriptions(accepted);
+    } catch (error) {
+      // Never let quota bookkeeping affect the save flow.
+    }
+  },
+
+  // Spec §3.1: after the first successful glucose/bp save with no enabled
+  // plan, show the in-page banner unless the user chose "以后再说" before.
+  async offerReminder(metric, timeValue, period) {
+    if (!this.data.authed || (metric !== 'glucose' && metric !== 'bp')) return;
+    if (wasOfferDismissed(metric)) return;
+    const token = getToken();
+    const state = this._reminders || await this.syncReminderState();
+    if (!state || getToken() !== token) return;
+    if (!hasTemplates(state.templates) || !state.templates[metric]) return;
+    if (planFor(state, metric).enabled) return;
+    this.setData({
+      reminderOffer: {
+        metric,
+        time: roundToFiveMinutes(timeValue),
+        period: metric === 'glucose' ? period : null,
+        question: offerQuestion(metric),
+        done: false,
+        doneText: ''
+      },
+      reminderOfferBusy: false
+    });
+  },
+
+  dismissReminderOffer() {
+    const offer = this.data.reminderOffer;
+    if (!offer || this.data.reminderOfferBusy) return;
+    if (!offer.done) dismissOffer(offer.metric);
+    this.setData({ reminderOffer: null });
+  },
+
+  async enableReminderOffer() {
+    const offer = this.data.reminderOffer;
+    const state = this._reminders;
+    if (!offer || offer.done || this.data.reminderOfferBusy || !state) return;
+    // Synchronous, inside the tap: request both templates (spec §3.1 step 2).
+    const subscribing = requestSubscribe(state.templates, templateMetrics(state.templates));
+    const requestToken = getToken();
+    this.setData({ reminderOfferBusy: true });
+    try {
+      const body = { enabled: true, time: offer.time };
+      if (offer.metric === 'glucose') body.period = offer.period;
+      const plan = await savePlan(offer.metric, body);
+      const result = await subscribing;
+      await reportSubscriptions(result && result.accepted);
+      if (getToken() !== requestToken) return;
+      this.setData({ reminderOffer: Object.assign({}, offer, { done: true, doneText: enabledPlanText(plan) }) });
+      this.syncReminderState();
+    } catch (error) {
+      if (getToken() !== requestToken) return;
+      if (handleRequestError(this, error, requestToken)) return;
+      this.showToast(reminderErrorMessage(error, friendlyErrorMessage(error, '开启失败，请稍后重试')));
+    } finally {
+      this.setData({ reminderOfferBusy: false });
+    }
   },
 
   showToast(message) {

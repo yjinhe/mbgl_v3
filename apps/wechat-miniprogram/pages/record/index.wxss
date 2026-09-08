@@ -32,6 +32,51 @@
   padding-left: 28rpx;
 }
 
+.reminder-offer {
+  margin-bottom: 16rpx;
+  padding: 24rpx;
+  border-radius: 24rpx;
+  background: var(--brand-soft);
+}
+
+.reminder-offer-title {
+  color: var(--brand-deep);
+  font-size: 30rpx;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.reminder-offer-copy {
+  margin-top: 8rpx;
+  color: var(--ink-2);
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.reminder-offer-enable {
+  margin-top: 16rpx;
+}
+
+.reminder-offer-later {
+  width: 100%;
+  min-height: 96rpx;
+  margin-top: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand);
+  font-size: 28rpx;
+  font-weight: 650;
+  text-decoration: underline;
+}
+
+.reminder-offer-help {
+  margin-top: 16rpx;
+  color: var(--ink-2);
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
 .draft-notice {
   padding: 16rpx 20rpx;
   margin-bottom: 16rpx;

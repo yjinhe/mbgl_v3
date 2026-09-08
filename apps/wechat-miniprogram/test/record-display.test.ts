@@ -30,6 +30,13 @@ function pageFor(name: string, overrides: Record<string, unknown> = {}) {
       markRecordsChanged: vi.fn()
     },
     '../../utils/tabbar': { syncTabBar: vi.fn(), setRecordEdit: vi.fn(), setRecordReturnPath: vi.fn() },
+    '../../utils/reminders': {
+      loadReminders: async () => ({ plans: [], templates: {} }),
+      quotaEmptyMetrics: () => [],
+      enabledTemplateMetrics: () => [],
+      requestSubscribe: async () => ({ accepted: [] }),
+      reportSubscriptions: async () => null
+    },
     '../../utils/record-draft': cjs('utils/record-draft.js'),
     '../../utils/avatar': {},
     '../../utils/privacy': {},

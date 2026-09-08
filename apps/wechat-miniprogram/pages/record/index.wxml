@@ -14,6 +14,19 @@
     <view class="sheet {{sheetOn}}">
       <view class="sheet-h"><text class="t">{{editingId ? '修改记录' : '记一笔'}}</text><button class="x" disabled="{{saving}}" aria-label="关闭录入" bindtap="closeSheet">×</button></view>
       <view class="sheet-body">
+        <view wx:if="{{reminderOffer}}" class="reminder-offer">
+          <block wx:if="{{reminderOffer.done}}">
+            <view class="reminder-offer-title">已开启</view>
+            <view class="reminder-offer-copy">{{reminderOffer.doneText}}</view>
+          </block>
+          <block wx:else>
+            <view class="reminder-offer-title">{{reminderOffer.question}}</view>
+            <view class="reminder-offer-copy">每天 {{reminderOffer.time}} 提醒，之后可以修改</view>
+            <button class="btn primary reminder-offer-enable" loading="{{reminderOfferBusy}}" disabled="{{reminderOfferBusy}}" bindtap="enableReminderOffer">开启提醒</button>
+            <button class="reminder-offer-later" disabled="{{reminderOfferBusy}}" bindtap="dismissReminderOffer">以后再说</button>
+            <view class="reminder-offer-help">弹出提示时请勾选「总是保持以上选择」，以后就不用每次确认</view>
+          </block>
+        </view>
         <view wx:if="{{draftNotice}}" class="draft-notice">{{draftNotice}}</view>
         <view wx:if="{{!authed}}" class="demo-banner compact-demo">
           <view class="demo-title">功能演示</view>

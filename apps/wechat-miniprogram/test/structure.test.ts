@@ -25,6 +25,7 @@ describe('wechat miniprogram structure', () => {
       'pages/mine/index',
       'pages/recycle/index',
       'pages/weekly-report/index',
+      'pages/reminders/index',
       'pages/legal/privacy/index',
       'pages/legal/terms/index'
     ]);
@@ -401,6 +402,80 @@ describe('wechat miniprogram structure', () => {
     expect(mineJs).toContain("download('/api/app/export/csv?metric=all')");
     expect(mineJs).toContain('wx.shareFileMessage');
     expect(projectConfig.setting.urlCheck).toBe(true);
+  });
+
+  test('wires measurement reminders through one-time subscribe messages', () => {
+    const remindersJs = fs.readFileSync(path.join(root, 'utils/reminders.js'), 'utf8');
+    const recordJs = fs.readFileSync(path.join(root, 'pages/record/index.js'), 'utf8');
+    const recordWxml = fs.readFileSync(path.join(root, 'pages/record/index.wxml'), 'utf8');
+    const recordWxss = fs.readFileSync(path.join(root, 'pages/record/index.wxss'), 'utf8');
+    const remindersJson = readJson<{ navigationBarTitleText: string }>('pages/reminders/index.json');
+    const remindersJsPage = fs.readFileSync(path.join(root, 'pages/reminders/index.js'), 'utf8');
+    const remindersWxml = fs.readFileSync(path.join(root, 'pages/reminders/index.wxml'), 'utf8');
+    const remindersWxss = fs.readFileSync(path.join(root, 'pages/reminders/index.wxss'), 'utf8');
+    const mineJs = fs.readFileSync(path.join(root, 'pages/mine/index.js'), 'utf8');
+    const mineWxml = fs.readFileSync(path.join(root, 'pages/mine/index.wxml'), 'utf8');
+    const homeJs = fs.readFileSync(path.join(root, 'pages/home/index.js'), 'utf8');
+    const homeWxml = fs.readFileSync(path.join(root, 'pages/home/index.wxml'), 'utf8');
+    const homeWxss = fs.readFileSync(path.join(root, 'pages/home/index.wxss'), 'utf8');
+
+    // Template IDs come from the server, never from the bundle.
+    expect(remindersJs).toContain('wx.requestSubscribeMessage');
+    expect(remindersJs).toContain("request('/api/app/reminders')");
+    expect(remindersJs).toContain("'/api/app/reminders/subscriptions'");
+    expect(remindersJs).toContain('MINIPROGRAM_REQUIRED');
+    expect(remindersJs).not.toMatch(/qvQ6BOZEl8UZjy1i2hVuu4L0|d_a_7U22lRygaMbZjGjj87Z/);
+
+    // Record page: deep link preselect, quota request at the top of save(), offer banner.
+    expect(recordJs).toContain('applyLaunchOptions(options');
+    expect(recordJs).toContain('setRecordMetric(metric)');
+    expect(recordJs).toContain('this.applyPresetPeriod()');
+    expect(recordJs.indexOf('const subscribing = this.requestReminderQuota();')).toBeLessThan(recordJs.indexOf('const saveToken = getToken();'));
+    expect(recordJs).toContain('reportSubscriptions(accepted)');
+    expect(recordJs).toContain('wasOfferDismissed(metric)');
+    expect(recordWxml).toContain('bindtap="enableReminderOffer"');
+    expect(recordWxml).toContain('bindtap="dismissReminderOffer"');
+    expect(recordWxml).toContain('开启提醒');
+    expect(recordWxml).toContain('以后再说');
+    expect(recordWxml).toContain('弹出提示时请勾选「总是保持以上选择」，以后就不用每次确认');
+    expect(recordWxml.indexOf('class="reminder-offer"')).toBeLessThan(recordWxml.indexOf('class="draft-notice"'));
+    expect(recordWxss).toMatch(/\.reminder-offer-help\s*\{[^}]*font-size:\s*26rpx/);
+    expect(recordWxss).toMatch(/\.reminder-offer-later\s*\{[^}]*min-height:\s*96rpx/);
+
+    // Settings page.
+    expect(remindersJson.navigationBarTitleText).toBe('测量提醒');
+    // Card titles are rendered from utils/reminders METRIC_NAMES, so assert the names there and the loop in wxml.
+    const remindersUtil = fs.readFileSync(path.join(root, 'utils/reminders.js'), 'utf8');
+    expect(remindersUtil).toContain("glucose: '血糖'");
+    expect(remindersUtil).toContain("bp: '血压'");
+    expect(remindersWxml).toContain('{{item.name}}提醒');
+    expect(remindersWxml).toContain('mode="time"');
+    expect(remindersWxml).toContain('mode="selector"');
+    expect(remindersWxml).toContain('bindtap="toggleReminder"');
+    expect(remindersWxml).toContain('bindchange="onTimeChange"');
+    expect(remindersWxml).toContain('bindchange="onPeriodChange"');
+    expect(remindersWxml).toContain('switch-knob');
+    expect(remindersWxml).toContain('每次保存记录时微信会请您确认一次提醒，勾选「总是保持以上选择」以后就不再询问。');
+    expect(remindersJsPage).toContain('requestSubscribe(this._state.templates, [card.metric])');
+    expect(remindersJsPage).toContain('handleRequestError(this, error, requestToken)');
+    expect(remindersWxss).toMatch(/\.reminder-switch\s*\{[^}]*height:\s*96rpx/);
+    expect(remindersWxss).toMatch(/\.reminder-row\s*\{[^}]*min-height:\s*104rpx/);
+
+    // Mine cell above the weekly report cell, hidden without templates.
+    expect(mineWxml).toContain('测量提醒');
+    expect(mineWxml).toContain('bindtap="goReminders"');
+    expect(mineWxml).toContain('wx:if="{{remindersAvailable}}"');
+    expect(mineWxml.indexOf('测量提醒')).toBeLessThan(mineWxml.indexOf('给家人看近7天记录'));
+    expect(mineJs).toContain("wx.navigateTo({ url: '/pages/reminders/index' })");
+    expect(mineJs).toContain('planSummary(state.plans)');
+
+    // Home quota row below the streak banner, never in guest mode.
+    expect(homeWxml).toContain('明天的提醒还没准备好，点一下就好');
+    expect(homeWxml).toContain('bindtap="prepareReminders"');
+    expect(homeWxml).toContain('wx:if="{{authed && reminderQuotaEmpty}}"');
+    expect(homeWxml.indexOf('streakMessage')).toBeLessThan(homeWxml.indexOf('prepareReminders'));
+    expect(homeJs).toContain('quotaEmptyMetrics(state)');
+    expect(homeWxss).toMatch(/\.reminder-quota-copy\s*\{[^}]*font-size:\s*26rpx/);
   });
 
   test('does not expose regulated service wording in uploadable source files', () => {

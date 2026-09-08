@@ -47,9 +47,16 @@ function loadRecordDefinition(overrides: Record<string, unknown> = {}) {
       consumeRecordMetric: () => '',
       consumeRecordEdit: () => null,
       consumeRecordReturnPath: () => '/pages/home/index',
+      setRecordMetric: vi.fn(),
       setRecordReturnPath: vi.fn(),
       syncTabBar: vi.fn()
     },
+    // The real module with no login token: every call is a no-op that resolves
+    // to an empty state, so the save flow is exercised without a network.
+    '../../utils/reminders': loadCommonJs(
+      path.join(root, 'utils/reminders.js'),
+      (id: string) => (id === './api' ? { getToken: () => '', request: vi.fn() } : metrics)
+    ),
     '../../utils/metrics': metrics
   };
   Object.assign(stubs, overrides);

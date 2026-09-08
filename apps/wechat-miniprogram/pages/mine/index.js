@@ -9,6 +9,7 @@ const {
 } = require('../../utils/data-cache');
 const { doLogin, loadMe, logoutToLogin } = require('../../utils/page');
 const { hasConsent, openPrivacyContract } = require('../../utils/privacy');
+const { hasTemplates, loadReminders, planSummary } = require('../../utils/reminders');
 const { syncTabBar } = require('../../utils/tabbar');
 
 const MINE_CACHE_DOMAINS = ['records', 'profile'];
@@ -45,6 +46,8 @@ Page({
     exporting: false,
     updatingAvatar: false,
     consentChecked: false,
+    remindersAvailable: false,
+    reminderSummary: '未开启',
     navStyle: ''
   },
 
@@ -57,7 +60,35 @@ Page({
 
   onShow() {
     syncTabBar(this);
-    if (!this.isDataFresh()) this.refresh();
+    if (!this.isDataFresh()) {
+      this.refresh();
+      return;
+    }
+    // The reminders page invalidates its cache after every change, so this
+    // is cheap when nothing changed and current when something did.
+    if (this.data.authed) this.loadReminderSummary();
+  },
+
+  // Sub text for the "测量提醒" cell; the cell is hidden when the server
+  // has no templates configured (spec §7).
+  loadReminderSummary() {
+    const token = getToken();
+    if (!token) {
+      if (this.data.remindersAvailable) this.setData({ remindersAvailable: false, reminderSummary: '未开启' });
+      return Promise.resolve(null);
+    }
+    return loadReminders().then((state) => {
+      if (getToken() !== token) return null;
+      this.setData({
+        remindersAvailable: hasTemplates(state.templates),
+        reminderSummary: planSummary(state.plans)
+      });
+      return state;
+    }).catch(() => null);
+  },
+
+  goReminders() {
+    wx.navigateTo({ url: '/pages/reminders/index' });
   },
 
   async login() {
@@ -79,13 +110,14 @@ Page({
     if (me === false || !isDataLeaseCurrent(lease, getToken())) return;
     if (!me) {
       if (this.data.authed || this.data.loading || this.data.me) {
-        this.setData({ authed: false, loading: false, me: null });
+        this.setData({ authed: false, loading: false, me: null, remindersAvailable: false, reminderSummary: '未开启' });
       }
       this.markDataFresh();
       return;
     }
     this.applyMe(me);
     this.markDataFresh();
+    this.loadReminderSummary();
   },
 
   applyMe(me) {

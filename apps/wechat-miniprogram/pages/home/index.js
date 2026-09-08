@@ -13,6 +13,13 @@ const {
 const { demoMe, demoOverview } = require('../../utils/demo');
 const { hasConsent } = require('../../utils/privacy');
 const {
+  enabledTemplateMetrics,
+  loadReminders,
+  quotaEmptyMetrics,
+  reportSubscriptions,
+  requestSubscribe
+} = require('../../utils/reminders');
+const {
   clearRecordReturnPath,
   setRecordMetric,
   setRecordReturnPath,
@@ -71,6 +78,8 @@ Page({
     pendingRecordError: '',
     promptNicknameAfterLoad: false,
     pendingRecordAfterLoad: false,
+    reminderQuotaEmpty: false,
+    reminderPreparing: false,
     tab: 'home',
     homeOn: 'on',
     historyOn: '',
@@ -100,6 +109,10 @@ Page({
       if (refreshed === false) return;
       data = refreshed;
       this.markDataFresh();
+    } else if (this.data.authed) {
+      // Saving a record may have topped up quota; the reminders cache is
+      // invalidated after that report, so this stays cheap otherwise.
+      this.syncReminderQuota();
     }
     if (data && this.data.pendingRecordAfterLoad && !this.data.pendingRecordError) {
       await this.savePendingRecord();
@@ -521,7 +534,45 @@ Page({
       supportCards: cards.filter((card) => card.isBp || card.isUric),
       allMetricsEmpty: cards.every((card) => card.empty)
     });
+    if (isDemo) {
+      this._reminders = null;
+      if (this.data.reminderQuotaEmpty) this.setData({ reminderQuotaEmpty: false });
+    } else {
+      this.syncReminderQuota();
+    }
     return data;
+  },
+
+  // Spec §3.4: when an enabled plan has no quota left, offer a one-tap
+  // top-up below the streak banner. Never runs in guest mode.
+  syncReminderQuota() {
+    const token = getToken();
+    if (!token) return Promise.resolve(null);
+    return loadReminders().then((state) => {
+      if (getToken() !== token) return null;
+      this._reminders = state;
+      const empty = quotaEmptyMetrics(state).length > 0;
+      if (empty !== this.data.reminderQuotaEmpty) this.setData({ reminderQuotaEmpty: empty });
+      return state;
+    }).catch(() => null);
+  },
+
+  async prepareReminders() {
+    const state = this._reminders;
+    if (this.data.reminderPreparing || !this.data.authed || !state) return;
+    // Synchronous, inside the tap: WeChat only opens the dialog from a gesture.
+    const subscribing = requestSubscribe(state.templates, enabledTemplateMetrics(state));
+    const token = getToken();
+    this.setData({ reminderPreparing: true });
+    try {
+      const result = await subscribing;
+      await reportSubscriptions(result && result.accepted);
+      if (getToken() !== token) return;
+      this.setData({ reminderQuotaEmpty: false });
+      wx.showToast({ title: '明天的提醒准备好了', icon: 'none' });
+    } finally {
+      this.setData({ reminderPreparing: false });
+    }
   },
 
   isDataFresh() {
