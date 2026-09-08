@@ -109,6 +109,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @tangji/shared build
+      - run: pnpm --filter @tangji/api prisma:generate
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e
       - name: Upload Playwright diagnostics
