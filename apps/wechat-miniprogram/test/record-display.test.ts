@@ -18,7 +18,9 @@ function pageFor(name: string, overrides: Record<string, unknown> = {}) {
     '../../utils/page': {
       ensureLogin: async () => true,
       fetchMe: async () => ({ id: 'user-a', unit: 'mmol' }),
-      decorateRecord: (metric: string, record: object) => ({ metric, ...record })
+      decorateRecord: (metric: string, record: object) => ({ metric, ...record }),
+      handleRequestError: () => false,
+      friendlyErrorMessage: (error: any, fallback: string) => error.message || fallback
     },
     '../../utils/data-cache': {
       captureDataLease: () => ({ generation: 0, versions: { records: 0, profile: 0 } }),

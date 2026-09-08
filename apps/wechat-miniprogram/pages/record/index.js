@@ -6,10 +6,10 @@ const {
   markPageFresh,
   markRecordsChanged
 } = require('../../utils/data-cache');
-const { loadMe, promptLoginForAction } = require('../../utils/page');
+const { friendlyErrorMessage, handleRequestError, loadMe, promptLoginForAction } = require('../../utils/page');
 const { demoMe } = require('../../utils/demo');
 const { newRecordRequestId, readRecordDrafts, writeRecordDrafts } = require('../../utils/record-draft');
-const { toDateInput, toIsoFromInputs, toTimeInput } = require('../../utils/format');
+const { toDateInput, toTimeInput } = require('../../utils/format');
 const {
   consumeRecordMetric,
   consumeRecordEdit,
@@ -820,12 +820,13 @@ Page({
   async save() {
     if (this.data.saving) return;
     const saveToken = getToken();
+    let pendingRecord = null;
     try {
       this.setData({ saving: true });
       const metric = this.data.metric;
       const measurementError = this.measurementTimeError();
       if (measurementError) throw new Error(measurementError);
-      const measuredAt = toIsoFromInputs(this.data.dateValue, this.data.timeValue);
+      const measuredAt = this.measurementDate().toISOString();
       if (typeof this.data.note !== 'string' || this.data.note.length > 50) throw new Error('备注不能超过 50 个字符');
       let data = { measuredAt, note: this.data.note };
       if (metric === 'glucose') {
@@ -868,6 +869,11 @@ Page({
       const options = editingId
         ? { method: 'PATCH', data }
         : { method: 'POST', data, header: { 'Idempotency-Key': this.requestIdFor(metric, data) } };
+      // Logging out clears local drafts, so keep a new record as a pending
+      // record when the session turns out to be expired (see handleRequestError).
+      if (!editingId) {
+        pendingRecord = { metric, data, clientRequestId: this.requestIdFor(metric, data), ownerId: this.data.me && this.data.me.id };
+      }
       this.persistDraft();
       const result = await request(`/api/app/records/${metric}${editingId ? '/' + encodeURIComponent(editingId) : ''}`, options);
       if (!isDataLeaseCurrent(lease, getToken())) return;
@@ -882,7 +888,8 @@ Page({
       this.showSaveSuccess(presentation, result && result.safetyAlert, Boolean(editingId));
     } catch (error) {
       if (saveToken !== getToken()) return;
-      this.showToast(error.message || '保存失败');
+      if (handleRequestError(this, error, saveToken, { pendingRecord })) return;
+      this.showToast(friendlyErrorMessage(error, '保存失败'));
     } finally {
       this.setData({ saving: false });
     }

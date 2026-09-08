@@ -222,7 +222,12 @@ describe('stats loading isolation', () => {
     const stubs: Record<string, any> = {
       '../../utils/api': { getToken: () => 'token', request },
       '../../utils/data-cache': { captureDataLease: () => ({ generation: 1, versions: { records: 1, profile: 1 } }), isDataLeaseCurrent: () => true, isPageFresh: () => false, markPageFresh: vi.fn() },
-      '../../utils/page': { ensureLogin: async () => true, fetchMe: async () => ({ unit: 'mmol' }) },
+      '../../utils/page': {
+        ensureLogin: async () => true,
+        fetchMe: async () => ({ unit: 'mmol' }),
+        handleRequestError: () => false,
+        friendlyErrorMessage: (error: any, fallback: string) => error.message || fallback
+      },
       '../../utils/demo': {},
       '../../utils/metrics': commonJs('utils/metrics.js'),
       '../../utils/stats-view': commonJs('utils/stats-view.js'),

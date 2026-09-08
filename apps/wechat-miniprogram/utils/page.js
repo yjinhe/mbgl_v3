@@ -5,6 +5,12 @@ const { fmtMD, fmtTime, dayLabel } = require('./format');
 const { metricByKey, neutralStatusLabel, periodNames, readRecord, statusClass, statusStyle } = require('./metrics');
 
 const PENDING_RECORD_KEY = 'tangji_pending_record';
+const ERROR_MESSAGES = {
+  UNAUTHORIZED: '登录已过期，请重新登录',
+  FORBIDDEN: '没有权限',
+  NOT_FOUND: '记录不存在或已删除'
+};
+let consentUpdatePrompted = false;
 
 function shouldClearLogin(error, requestToken) {
   return Boolean(
@@ -14,8 +20,57 @@ function shouldClearLogin(error, requestToken) {
   );
 }
 
+function friendlyErrorMessage(error, fallback = '加载失败，请稍后重试') {
+  const code = error && error.code;
+  const message = error && error.message;
+  if (code && ERROR_MESSAGES[code]) return ERROR_MESSAGES[code];
+  if (message && ERROR_MESSAGES[message]) return ERROR_MESSAGES[message];
+  return message || fallback;
+}
+
+// Logs out and returns to the home page when a request failed because the
+// current login is no longer valid. Returns true when it handled the error so
+// callers can stop rendering the failure. `options.pendingRecord` keeps an
+// unsaved new record so it is submitted automatically after re-login.
+function handleRequestError(page, error, requestToken, options = {}) {
+  if (!shouldClearLogin(error, requestToken)) return false;
+  logoutToLogin(page);
+  const pendingRecord = options.pendingRecord || null;
+  if (pendingRecord) setPendingRecord(pendingRecord);
+  wx.showToast({
+    title: pendingRecord ? '登录已过期，重新登录后会自动保存本次记录' : friendlyErrorMessage(error, '登录已过期，请重新登录'),
+    icon: 'none'
+  });
+  wx.reLaunch({ url: pendingRecord ? '/pages/home/index?pendingRecord=1' : '/pages/home/index' });
+  return true;
+}
+
+// The privacy policy version changed after this device agreed to it. Explain
+// once per launch and send the user to the home page, where the login card
+// asks for consent again; other pages fall back to demo data meanwhile.
+function promptConsentUpdate() {
+  if (consentUpdatePrompted) return;
+  consentUpdatePrompted = true;
+  wx.showModal({
+    title: '隐私政策已更新',
+    content: '隐私政策已更新，请重新确认',
+    cancelText: '稍后',
+    confirmText: '去确认',
+    confirmColor: '#0E7E6B',
+    success: (result) => {
+      if (!result.confirm) return;
+      const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : [];
+      const current = pages.length ? pages[pages.length - 1] : null;
+      if (current && current.route === 'pages/home/index') return;
+      wx.switchTab({ url: '/pages/home/index' });
+    }
+  });
+}
+
 async function ensureLogin(page) {
-  if (getToken() && hasConsent()) return true;
+  const token = getToken();
+  if (token && hasConsent()) return true;
+  if (token) promptConsentUpdate();
   if (page.data.authed || page.data.loading) {
     page.setData({ authed: false, loading: false });
   }
@@ -57,6 +112,10 @@ function getPendingRecord() {
   return wx.getStorageSync(PENDING_RECORD_KEY) || null;
 }
 
+function setPendingRecord(pendingRecord) {
+  wx.setStorageSync(PENDING_RECORD_KEY, pendingRecord);
+}
+
 function clearPendingRecord() {
   wx.removeStorageSync(PENDING_RECORD_KEY);
 }
@@ -70,7 +129,7 @@ function promptLoginForAction(pendingRecord) {
     confirmColor: '#0E7E6B',
     success: (result) => {
       if (!result.confirm) return;
-      wx.setStorageSync(PENDING_RECORD_KEY, pendingRecord);
+      setPendingRecord(pendingRecord);
       wx.reLaunch({ url: '/pages/home/index?pendingRecord=1' });
     }
   });
@@ -86,15 +145,8 @@ async function loadAppData(page) {
     ]);
     return { me, overview };
   } catch (error) {
-    const authExpired = shouldClearLogin(error, requestToken);
-    if (authExpired) {
-      logoutToLogin(page);
-      wx.reLaunch({ url: '/pages/home/index' });
-    }
-    wx.showToast({
-      title: authExpired ? '请重新登录' : (error.message || '加载失败，请稍后重试'),
-      icon: 'none'
-    });
+    if (handleRequestError(page, error, requestToken)) return false;
+    wx.showToast({ title: friendlyErrorMessage(error), icon: 'none' });
     return false;
   }
 }
@@ -113,15 +165,8 @@ async function loadMe(page, options = {}) {
     if (options.apply !== false) page.setData({ authed: true, me });
     return me;
   } catch (error) {
-    const authExpired = shouldClearLogin(error, requestToken);
-    if (authExpired) {
-      logoutToLogin(page);
-      wx.reLaunch({ url: '/pages/home/index' });
-    }
-    wx.showToast({
-      title: authExpired ? '请重新登录' : (error.message || '加载失败，请稍后重试'),
-      icon: 'none'
-    });
+    if (handleRequestError(page, error, requestToken)) return false;
+    wx.showToast({ title: friendlyErrorMessage(error), icon: 'none' });
     return false;
   }
 }
@@ -152,9 +197,13 @@ module.exports = {
   doLogin,
   ensureLogin,
   fetchMe,
+  friendlyErrorMessage,
   getPendingRecord,
+  handleRequestError,
   loadAppData,
   loadMe,
   logoutToLogin,
-  promptLoginForAction
+  promptLoginForAction,
+  setPendingRecord,
+  shouldClearLogin
 };

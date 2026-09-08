@@ -31,13 +31,15 @@ describe('mini-program metric rules match shared domain rules', () => {
   });
 
   test('blood pressure status boundaries stay aligned', () => {
-    for (const [sbp, dbp] of [[89, 60], [120, 80], [135, 85], [160, 100], [185, 115]] as const) {
+    for (const [sbp, dbp, expected] of [[89, 60, 'dlow'], [120, 80, 'ok'], [135, 85, 'hi'], [160, 100, 'dhigh'], [185, 115, 'dhigh'], [165, 55, 'dhigh'], [85, 55, 'dlow']] as const) {
+      expect(mini.bpStatus(sbp, dbp).key).toBe(expected);
       expect(mini.bpStatus(sbp, dbp).key).toBe(bpStatus(sbp, dbp).key);
     }
   });
 
   test('lipid status boundaries stay aligned', () => {
-    for (const [key, value] of [['tc', 5.2], ['tg', 2.3], ['ldl', 4.1], ['hdl', 0.9], ['hdl', 1.0]] as const) {
+    for (const [key, value, expected] of [['tc', 5.2, 'hi'], ['tg', 2.3, 'dhigh'], ['ldl', 4.1, 'dhigh'], ['hdl', 0.9, 'lo'], ['hdl', 1.0, 'ok']] as const) {
+      expect(mini.lipidItemStatus(key, value).key).toBe(expected);
       expect(mini.lipidItemStatus(key, value).key).toBe(lipidStatus(key, value).key);
     }
   });

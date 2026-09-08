@@ -99,15 +99,17 @@ function glucoseStatus(value, period, target) {
 function bpStatus(sbp, dbp) {
   const s = Number(sbp);
   const d = Number(dbp);
+  // Mirrors packages/shared/src/bp.ts: high readings take priority so a low
+  // value in one component does not mask an elevated one (e.g. 165/55).
+  if (s >= 160 || d >= 100) return { key: 'dhigh', label: '明显偏高' };
+  if (s >= 135 || d >= 85) return { key: 'hi', label: '偏高' };
   if (s < 90 || d < 60) return { key: 'dlow', label: '偏低' };
-  if (s < 135 && d < 85) return { key: 'ok', label: '正常' };
-  if (s < 160 && d < 100) return { key: 'hi', label: '偏高' };
-  return { key: 'dhigh', label: '明显偏高' };
+  return { key: 'ok', label: '正常' };
 }
 
 function lipidItemStatus(key, value) {
   const v = Number(value);
-  if (key === 'hdl') return v >= 1 ? { key: 'ok', label: '合适' } : { key: 'hi', label: '偏低' };
+  if (key === 'hdl') return v >= 1 ? { key: 'ok', label: '合适' } : { key: 'lo', label: '偏低' };
   if (key === 'tc') {
     if (v < 5.2) return { key: 'ok', label: '合适' };
     if (v < 6.2) return { key: 'hi', label: '边缘升高' };
