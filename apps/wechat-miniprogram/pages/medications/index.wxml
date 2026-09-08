@@ -44,8 +44,10 @@
                 <view class="med-name">{{item.name}}</view>
                 <view class="med-times num">每天 {{item.timesText}}</view>
               </view>
-              <button class="med-act" aria-label="修改 {{item.name}}" data-id="{{item.id}}" bindtap="openEdit">修改</button>
-              <button class="med-act med-act-danger" aria-label="删除 {{item.name}}" data-id="{{item.id}}" bindtap="removeItem">删除</button>
+              <view class="med-actions">
+                <button class="med-act" aria-label="修改 {{item.name}}" data-id="{{item.id}}" bindtap="openEdit">修改</button>
+                <button class="med-act med-act-danger" aria-label="删除 {{item.name}}" data-id="{{item.id}}" bindtap="removeItem">删除</button>
+              </view>
             </view>
           </view>
           <button wx:if="{{hasMedications}}" class="btn ghost med-add" bindtap="openAdd">{{canAdd ? '＋ 添加常用药' : '常用药最多 8 种'}}</button>
