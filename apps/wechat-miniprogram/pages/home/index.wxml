@@ -44,6 +44,11 @@
           <text>{{streakMessage}}</text>
         </view>
 
+        <button wx:if="{{authed && medicationPending > 0}}" class="reminder-quota medication-pending" aria-label="今天还有 {{medicationPending}} 次药没记，去我的常用药" bindtap="goMedications">
+          <text class="reminder-quota-copy">今天还有 {{medicationPending}} 次药没记，点一下去看看</text>
+          <text class="medication-pending-arrow">›</text>
+        </button>
+
         <view wx:if="{{authed && reminderQuotaEmpty}}" class="reminder-quota">
           <text class="reminder-quota-copy">明天的提醒还没准备好，点一下就好</text>
           <button class="btn ghost reminder-quota-btn" loading="{{reminderPreparing}}" disabled="{{reminderPreparing}}" bindtap="prepareReminders">准备好</button>

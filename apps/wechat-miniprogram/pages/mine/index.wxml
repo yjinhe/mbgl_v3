@@ -47,6 +47,7 @@
           <view class="sec-label">数据与隐私</view>
           <view class="card cell-card">
             <view wx:if="{{remindersAvailable}}" class="cell" bindtap="goReminders"><view class="cm"><view class="ct">测量提醒</view><view class="cs">{{reminderSummary}}</view></view><view class="cv">›</view></view>
+            <view class="cell" bindtap="goMedications"><view class="cm"><view class="ct">我的常用药</view><view class="cs">{{medicationSummary}}</view></view><view class="cv">›</view></view>
             <view class="cell" bindtap="goWeeklyReport"><view class="cm"><view class="ct">给家人看近7天记录</view><view class="cs">生成大字图片，自行选择转发或保存</view></view><view class="cv">›</view></view>
             <view class="cell" bindtap="exportAll"><view class="cm"><view class="ct">{{exporting ? '正在导出…' : '导出全部记录'}}</view><view class="cs">生成 ZIP 文件并通过微信发送或保存</view></view><view class="cv">›</view></view>
             <view class="cell" bindtap="goRecycle"><view class="cm"><view class="ct">回收站</view><view class="cs">删除的记录保留 7 天</view></view><view class="cv">›</view></view>

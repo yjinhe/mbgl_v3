@@ -180,9 +180,9 @@ model ReminderLog {
 
 ```
 WECHAT_TEMPLATE_GLUCOSE_REMINDER=qvQ6BOZEl8UZjy1i2hVuu4L0-R0zxe8NRA1LmxoWKfY
-WECHAT_TEMPLATE_GLUCOSE_FIELDS=time1,thing2,thing3      # 待确认，顺序：测量时间,测量时段,温馨提示
+WECHAT_TEMPLATE_GLUCOSE_FIELDS=date1,thing2,thing3      # 已核对，顺序：测量时间,测量时段,温馨提示
 WECHAT_TEMPLATE_BP_REMINDER=d_a_7U22lRygaMbZjGjj87Z-t-AJfqjRa6UQSQkxdb8
-WECHAT_TEMPLATE_BP_FIELDS=time1,thing2                  # 待确认，顺序：提醒时间,备注
+WECHAT_TEMPLATE_BP_FIELDS=time4,thing2                  # 已核对，顺序：提醒时间,备注
 WECHAT_MINIPROGRAM_STATE=formal                         # trial 用于体验版
 ```
 
@@ -224,6 +224,6 @@ WECHAT_MINIPROGRAM_STATE=formal                         # trial 用于体验版
 
 ## 11. 待确认
 
-- [ ] 两个模板的字段 key 与格式限制（§1 表格）。
+- [x] 两个模板的字段 key：血糖 `date1,thing2,thing3`，血压 `time4,thing2`（2026-09-08 核对）。
 - [ ] 血糖默认时段是否取「本次记录时段」，还是固定「空腹」。建议取本次记录时段：用户什么时候记，就什么时候提醒。
 - [ ] 额度上限 30 是否合适。按每天记一次算，相当于攒一个月。

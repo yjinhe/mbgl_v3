@@ -26,6 +26,7 @@ describe('wechat miniprogram structure', () => {
       'pages/recycle/index',
       'pages/weekly-report/index',
       'pages/reminders/index',
+      'pages/medications/index',
       'pages/legal/privacy/index',
       'pages/legal/terms/index'
     ]);
@@ -492,7 +493,121 @@ describe('wechat miniprogram structure', () => {
     walk(root);
 
     const source = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
-    expect(source).not.toMatch(/药房|药店|用药|服药|购药|处方|低血糖/);
+    // 用药 / 服药 are now spec-mandated wording for the user's own medication
+    // records (docs/WECHAT-MEDICATION-SPEC.md §7); the pharmacy / prescription
+    // wording stays banned.
+    expect(source).not.toMatch(/药房|药店|购药|处方|低血糖/);
     expect(source).not.toMatch(/多饮水|复查|复测|静坐后/);
+  });
+
+  test('wires medication records and reminders within the health-management boundary', () => {
+    const medicationsJs = fs.readFileSync(path.join(root, 'utils/medications.js'), 'utf8');
+    const remindersJs = fs.readFileSync(path.join(root, 'utils/reminders.js'), 'utf8');
+    const pageJson = readJson<{ navigationBarTitleText: string }>('pages/medications/index.json');
+    const pageJs = fs.readFileSync(path.join(root, 'pages/medications/index.js'), 'utf8');
+    const pageWxml = fs.readFileSync(path.join(root, 'pages/medications/index.wxml'), 'utf8');
+    const pageWxss = fs.readFileSync(path.join(root, 'pages/medications/index.wxss'), 'utf8');
+    const remindersWxml = fs.readFileSync(path.join(root, 'pages/reminders/index.wxml'), 'utf8');
+    const remindersJsPage = fs.readFileSync(path.join(root, 'pages/reminders/index.js'), 'utf8');
+    const mineJs = fs.readFileSync(path.join(root, 'pages/mine/index.js'), 'utf8');
+    const mineWxml = fs.readFileSync(path.join(root, 'pages/mine/index.wxml'), 'utf8');
+    const homeJs = fs.readFileSync(path.join(root, 'pages/home/index.js'), 'utf8');
+    const homeWxml = fs.readFileSync(path.join(root, 'pages/home/index.wxml'), 'utf8');
+    const homeWxss = fs.readFileSync(path.join(root, 'pages/home/index.wxss'), 'utf8');
+    const recordJs = fs.readFileSync(path.join(root, 'pages/record/index.js'), 'utf8');
+    const weeklyJs = fs.readFileSync(path.join(root, 'utils/weekly-report.js'), 'utf8');
+    const weeklyWxml = fs.readFileSync(path.join(root, 'pages/weekly-report/index.wxml'), 'utf8');
+    const footer = '用药请遵医嘱，本功能只帮您记录和提醒。';
+
+    // Utility contract (spec §5) and fixed copy (spec §7).
+    expect(medicationsJs).toContain("request('/api/app/medications')");
+    expect(medicationsJs).toContain("'/api/app/medications/checkins'");
+    expect(medicationsJs).toContain("MEDICATION_LIMIT_MESSAGE = '常用药最多 8 种'");
+    expect(medicationsJs).toContain(`FOOTER_TEXT = '${footer}'`);
+    expect(remindersJs).toContain("REMINDER_METRICS = ['glucose', 'bp', 'medication']");
+    expect(remindersJs).toContain("medication: '服药'");
+
+    // New page: registered, titled, footer on every state, check-in button with icon + text.
+    expect(pageJson.navigationBarTitleText).toBe('我的常用药');
+    expect(pageWxml).toContain('今天的药');
+    expect(pageWxml).toContain('我的常用药');
+    expect(pageWxml).toContain('还没有添加常用药');
+    expect(pageWxml).toContain('bindtap="toggleTaken"');
+    expect(pageWxml).toContain('bindtap="openAdd"');
+    expect(pageWxml).toContain('bindtap="openEdit"');
+    expect(pageWxml).toContain('bindtap="removeItem"');
+    expect(pageWxml).toContain('bindtap="addTime"');
+    expect(pageWxml).toContain('bindtap="removeTime"');
+    expect(pageWxml).toContain('bindtap="saveForm"');
+    expect(pageWxml).toContain('bindinput="onNameInput"');
+    expect(pageWxml).toContain('bindchange="onTimeChange"');
+    expect(pageWxml).toContain('maxlength="20"');
+    expect(pageWxml).toContain('mode="time"');
+    expect(pageWxml).toContain('scroll-into-view="{{scrollTo}}"');
+    expect(pageWxml).toContain('id="{{slot.id}}"');
+    expect(pageWxml).toContain('{{footerText}}');
+    expect(pageWxml.match(/\{\{footerText\}\}/g)).toHaveLength(2);
+    expect(pageJs).toContain("'吃了吗？'");
+    expect(pageJs).toContain("'已吃'");
+    expect(pageJs).toContain("requestSubscribe(this.reminderTemplates(), ['medication'])");
+    expect(pageJs).toContain('总是保持以上选择');
+    expect(pageJs).toContain("savePlan('medication', { enabled: true })");
+    expect(pageJs).toContain('handleRequestError(this, error, requestToken)');
+    expect(pageJs.indexOf("const subscribing = requestSubscribe(this.reminderTemplates(), ['medication']);")).toBeLessThan(pageJs.indexOf('await checkin('));
+    for (const cssClass of ['.take-btn', '.med-act', '.med-time-remove', '.med-empty-add']) {
+      expect(pageWxss, cssClass).toMatch(new RegExp(`\\${cssClass}\\s*\\{[^}]*min-height:\\s*(96|108)rpx`));
+    }
+    expect(pageWxss).toMatch(/\.take-btn\s*\{[^}]*font-size:\s*28rpx/);
+    expect(pageWxss).not.toMatch(/#[0-9A-Fa-f]{6}\b/);
+
+    // Reminders page: third card is a switch only.
+    expect(remindersWxml).toContain('wx:if="{{!item.hasTime}}"');
+    expect(remindersWxml).toContain('wx:if="{{item.hasTime}}"');
+    expect(remindersJsPage).toContain("MEDICATION_SUB_TEXT = '按常用药里的时间提醒'");
+
+    // Mine cell below 测量提醒; home row above the quota row; record quota list.
+    expect(mineWxml).toContain('我的常用药');
+    expect(mineWxml).toContain('bindtap="goMedications"');
+    expect(mineWxml.indexOf('测量提醒')).toBeLessThan(mineWxml.indexOf('我的常用药'));
+    expect(mineWxml.indexOf('我的常用药')).toBeLessThan(mineWxml.indexOf('给家人看近7天记录'));
+    expect(mineJs).toContain('medicationSummary(state.medications)');
+    expect(mineJs).toContain("wx.navigateTo({ url: '/pages/medications/index' })");
+    expect(homeWxml).toContain('次药没记，点一下去看看');
+    expect(homeWxml).toContain('bindtap="goMedications"');
+    expect(homeWxml).toContain('wx:if="{{authed && medicationPending > 0}}"');
+    expect(homeWxml.indexOf('streakMessage')).toBeLessThan(homeWxml.indexOf('goMedications'));
+    expect(homeWxml.indexOf('goMedications')).toBeLessThan(homeWxml.indexOf('prepareReminders'));
+    expect(homeJs).toContain('pendingCount(state.today)');
+    // Loaded right after the quota sync in performRefresh, i.e. only when not in guest mode.
+    expect(homeJs).toContain('} else {\n      this.syncReminderQuota();\n      this.syncMedicationPending();');
+    expect(homeWxss).toMatch(/\.medication-pending\s*\{[^}]*min-height:\s*96rpx/);
+    expect(recordJs).toContain('enabledTemplateMetrics(state)');
+
+    // Weekly report line on the canvas and in the page.
+    expect(weeklyJs).toContain('本周服药：计划 ${planned} 次，完成 ');
+    expect(weeklyJs).toContain('page.medicationText');
+    expect(weeklyWxml).toContain('{{medicationText}}');
+  });
+
+  test('keeps drug-advice wording out of medication screens and utilities', () => {
+    const files: string[] = [];
+    const walk = (directory: string) => {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        const filename = path.join(directory, entry.name);
+        if (entry.isDirectory()) walk(filename);
+        else if (/\.(wxml|js)$/.test(entry.name)) files.push(filename);
+      }
+    };
+    walk(path.join(root, 'pages'));
+    walk(path.join(root, 'utils'));
+
+    const banned = /剂量|处方|用法用量|医嘱建议/;
+    for (const file of files) {
+      const source = fs.readFileSync(file, 'utf8').replace(/用药请遵医嘱，本功能只帮您记录和提醒。/g, '');
+      expect(source, path.relative(root, file)).not.toMatch(banned);
+    }
+    // 医嘱 itself only appears inside the fixed footer.
+    const combined = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
+    expect(combined.replace(/用药请遵医嘱，本功能只帮您记录和提醒。/g, '')).not.toMatch(/医嘱/);
   });
 });

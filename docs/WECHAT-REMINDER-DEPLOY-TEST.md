@@ -10,12 +10,14 @@
 |---|---|---|
 | 血糖模板 ID | 公众平台「订阅消息 → 我的模板」 | `qvQ6BOZEl8UZjy1i2hVuu4L0-R0zxe8NRA1LmxoWKfY` |
 | 血压模板 ID | 同上 | `d_a_7U22lRygaMbZjGjj87Z-t-AJfqjRa6UQSQkxdb8` |
-| 血糖模板字段 key | 「我的模板 → 血糖测量提醒 → 详情」的「详细内容」，形如 `{{time1.DATA}}` | **待抄录**，顺序：测量时间、测量时段、温馨提示 |
-| 血压模板字段 key | 「我的模板 → 血压测量提醒 → 详情」 | **待抄录**，顺序：提醒时间、备注 |
+| 血糖模板字段 key | 「我的模板 → 血糖测量提醒 → 详情」 | `date1,thing2,thing3`（测量时间、测量时段、温馨提示，已核对） |
+| 血压模板字段 key | 「我的模板 → 血压测量提醒 → 详情」 | `time4,thing2`（提醒时间、备注，已核对） |
+| 用药模板 ID | 同上 | `8aOOwEcaG0qUgpZwhrR6SevYAp1QkpShbN210qsJjWs` |
+| 用药模板字段 key | 「我的模板 → 用药提醒 → 详情」 | `time1,thing5,thing3`（服药时间、药品、提示说明，已核对） |
 | 服务器 | 已部署糖迹的宿主机，有 `.env.docker` 与 Docker 权限 | |
 | 微信开发者工具 | 能上传体验版，且测试微信号已加为体验成员 | |
 
-字段 key 是本次部署唯一未确认的输入。抄录时只取 `{{` 与 `.DATA}}` 之间的部分，例如 `{{time1.DATA}}` 取 `time1`。
+三组字段 key 已于 2026-09-08 核对并写入代码默认值，`.env.docker` 里可以不填 `*_FIELDS`；若日后换模板，抄录时只取 `{{` 与 `.DATA}}` 之间的部分，例如 `{{date1.DATA}}` 取 `date1`。
 
 ## 1. 打 tag 并准备发布
 
@@ -36,9 +38,11 @@ git push origin v20260909
 ```env
 # 小程序测量提醒（一次性订阅消息）
 WECHAT_TEMPLATE_GLUCOSE_REMINDER=qvQ6BOZEl8UZjy1i2hVuu4L0-R0zxe8NRA1LmxoWKfY
-WECHAT_TEMPLATE_GLUCOSE_FIELDS=<key1>,<key2>,<key3>
+WECHAT_TEMPLATE_GLUCOSE_FIELDS=date1,thing2,thing3
 WECHAT_TEMPLATE_BP_REMINDER=d_a_7U22lRygaMbZjGjj87Z-t-AJfqjRa6UQSQkxdb8
-WECHAT_TEMPLATE_BP_FIELDS=<key1>,<key2>
+WECHAT_TEMPLATE_BP_FIELDS=time4,thing2
+WECHAT_TEMPLATE_MEDICATION_REMINDER=8aOOwEcaG0qUgpZwhrR6SevYAp1QkpShbN210qsJjWs
+WECHAT_TEMPLATE_MEDICATION_FIELDS=time1,thing5,thing3
 # 体验版联调阶段用 trial；验收通过后改回 formal
 WECHAT_MINIPROGRAM_STATE=trial
 ```
@@ -83,7 +87,7 @@ docker compose --env-file .env.docker logs --tail=200 tangji-api | grep -i -E 'r
 curl -s -H "Authorization: Bearer <token>" https://tangji.aiteam.pw/api/app/reminders
 ```
 
-通过标准：返回 JSON，`templates` 里同时有 `glucose` 和 `bp` 两个模板 ID，`plans` 为空数组或两条默认计划。`templates` 为空即模板未配置。
+通过标准：返回 JSON，`templates` 里有 `glucose`、`bp`、`medication` 三个模板 ID，`plans` 为空数组或默认计划。`templates` 为空即模板未配置。
 
 ## 5. 上传体验版并联调
 
@@ -101,7 +105,15 @@ curl -s -H "Authorization: Bearer <token>" https://tangji.aiteam.pw/api/app/remi
 8. **攒额度流程**：再记一笔任意已开启提醒的指标并保存。此时不应再弹授权窗（因为勾了「总是保持」）。
 9. **当天已记录不发**：把提醒时间改到当前时间加 6 分钟，但今天已经记录过该指标，到点后**不应**收到消息。
 
-通过标准：第 5、6、7 步收到消息且深链正确；第 8 步无弹窗；第 9 步无消息。
+10. **用药记录**（规格 `docs/WECHAT-MEDICATION-SPEC.md`）：我的 → 我的常用药 → 添加常用药，药名任意填，时间点设为**当前时间加 6 到 10 分钟**，保存。首次保存会弹订阅授权窗，勾「总是保持以上选择」后允许。
+11. 回到「我的 → 测量提醒」，第三张卡片「服药提醒」应为开。
+12. 到点应收到「用药提醒」消息，药品字段为刚填的药名。点开应进入「我的常用药」页并定位到该时间点。
+13. 点该药的「吃了吗？」变为「已吃 ✓」。再添加第二种药，时间点同样设为当前加 6 分钟，到点后消息里应同时出现两个药名（用「、」连接）。
+14. **全部打勾不发**：把两种药的时间点都改到当前加 6 分钟，先把两个都打勾，到点后**不应**收到消息。
+15. 首页应显示「今天还有 N 次药没记」一行（有未打勾时），全部打勾后消失。
+16. 统计 → 周报，最后一张图底部应有「本周服药：计划 N 次，完成 M 次」。
+
+通过标准：第 5、6、7 步收到消息且深链正确；第 8 步无弹窗；第 9 步无消息；第 12、13 步收到用药消息且合并药名；第 14 步无消息；第 15、16 步显示正确。
 
 ## 6. 切换到正式并收尾
 
@@ -110,8 +122,7 @@ curl -s -H "Authorization: Bearer <token>" https://tangji.aiteam.pw/api/app/remi
    docker compose --env-file .env.docker up -d tangji-api
    ```
 2. 再次执行 §3 的发布后检查。
-3. 小程序提交审核，审核备注在原有说明基础上补一句：「新增用户主动订阅的测量提醒，使用一次性订阅消息，每次授权仅发送一条，不含诊疗建议。」
-4. 更新 `docs/DOCKER-FULL-DEPLOY.md` §「小程序测量提醒」中「待确认」字样，把实际字段 key 写进去，提交 PR。
+3. 小程序提交审核，审核备注在原有说明基础上补充：「新增用户主动订阅的测量提醒与服药提醒，使用一次性订阅消息，每次授权仅发送一条；常用药由用户自行输入，不含药品信息库，不提供用药建议，不含诊疗建议。」
 
 ## 7. 排查
 
@@ -140,6 +151,8 @@ const p = new PrismaClient();
 | `ReminderLog.errcode = 40003` | 用户 `miniOpenid` | openid 不属于该小程序，多为 AppID 配错；计划已被自动停用 |
 | `ReminderLog.errcode = 40001/40014/42001` | `WECHAT_SECRET` | access_token 无效；确认 AppSecret 正确且未在公众平台重置 |
 | 日志 `access_token` 请求失败 | 服务器出网 | 服务器需能访问 `api.weixin.qq.com` |
+| 用药提醒到点没发，`ReminderLog` 有 `errmsg = all_taken` 的行 | `MedicationLog` | 该时间点的药已全部打勾，属正常跳过 |
+| 用药提醒同一时间点只发了一次，撤销打勾后也不再发 | `ReminderLog.slot` | 按设计同日同时间点只处理一次 |
 | 消息收到但点开不是记一笔页 | `page` 字段 | 体验版与正式版路径一致为 `pages/record/index`；确认体验版是最新上传 |
 
 ## 8. 回滚
@@ -164,4 +177,9 @@ migration 新增的两张表不会被回滚脚本删除，旧版本代码不读�
 | §5.7 收到血压提醒 | | |
 | §5.8 攒额度无弹窗 | | |
 | §5.9 已记录不发 | | |
+| §5.12 收到用药提醒并定位 | | |
+| §5.13 两药合并 | | |
+| §5.14 全部打勾不发 | | |
+| §5.15 首页未记提示 | | |
+| §5.16 周报服药行 | | |
 | §6 切回 formal | | |

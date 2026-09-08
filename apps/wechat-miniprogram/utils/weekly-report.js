@@ -4,6 +4,7 @@ const { dateParts, recordValues, seriesPoints } = require('./stats-view');
 const PAGE_SIZE = 8;
 const IMAGE_WIDTH = 1000;
 const FOOTNOTE = '仅供个人记录与家人沟通，不作为诊疗依据。';
+const MEDICATION_LINE_HEIGHT = 56;
 
 function buildWeeklyPages(report, options = {}) {
   const { unit = 'mmol', nickname = '', demo = false } = options;
@@ -62,7 +63,22 @@ function buildWeeklyPages(report, options = {}) {
     }
   });
   pages.forEach((page, index) => { page.pageNumber = index + 1; page.pageCount = pages.length; });
-  return { pages, totalRecords, rangeText: `${from.replace(/-/g, '/')} — ${to.replace(/-/g, '/')}` };
+  // Medication spec §3.6: one line after the metric sections, on the last
+  // image, only when something was planned this week.
+  const medicationText = medicationLine((report.sections || {}).medication);
+  if (medicationText && pages.length) {
+    const last = pages[pages.length - 1];
+    last.medicationText = medicationText;
+    last.height += MEDICATION_LINE_HEIGHT;
+  }
+  return { pages, totalRecords, medicationText, rangeText: `${from.replace(/-/g, '/')} — ${to.replace(/-/g, '/')}` };
+}
+
+function medicationLine(section) {
+  const planned = Number(section && section.planned);
+  const taken = Number(section && section.taken);
+  if (!Number.isFinite(planned) || planned <= 0) return '';
+  return `本周服药：计划 ${planned} 次，完成 ${Number.isFinite(taken) ? Math.max(0, taken) : 0} 次`;
 }
 
 function drawWeeklyPage(ctx, page) {
@@ -102,8 +118,9 @@ function drawWeeklyPage(ctx, page) {
       ctx.fillRect(56, top + page.rowHeight - 5, 888, 1);
     }
   });
+  if (page.medicationText) fittingText(page.medicationText, 56, page.height - 88 - MEDICATION_LINE_HEIGHT, 36, 888);
   text(`第 ${page.pageNumber} / ${page.pageCount} 张${page.pageCount > 1 ? ' · 请留意其余图片' : ''}`, 56, page.height - 88, 34, page.color);
   text(page.footnote, 56, page.height - 40, 32, '#41534E');
 }
 
-module.exports = { buildWeeklyPages, drawWeeklyPage, PAGE_SIZE };
+module.exports = { buildWeeklyPages, drawWeeklyPage, medicationLine, PAGE_SIZE };

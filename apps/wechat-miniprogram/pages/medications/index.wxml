@@ -1,0 +1,80 @@
+<view class="app-stage">
+  <view class="screen">
+    <view class="safe-navbar" style="{{navStyle}}">
+      <button class="back" aria-label="返回" bindtap="back">‹</button>
+      <view class="title">我的常用药</view>
+    </view>
+    <view class="pages">
+      <scroll-view class="page medications-page" scroll-y scroll-with-animation scroll-into-view="{{scrollTo}}">
+        <block wx:if="{{!authed}}">
+          <view class="empty">
+            <view>登录后记录常用药和每天的服药情况</view>
+            <button class="btn primary login-btn" bindtap="login">微信一键登录</button>
+          </view>
+        </block>
+
+        <block wx:else>
+          <view class="sec-label med-sec-label">今天的药<text wx:if="{{day}}" class="med-day num">{{day}}</text></view>
+
+          <view wx:if="{{!hasMedications}}" class="card med-empty">
+            <view class="med-empty-title">还没有添加常用药</view>
+            <view class="med-empty-copy">添加以后，每天在这里点一下就能记住吃没吃。</view>
+            <button class="btn primary med-empty-add" bindtap="openAdd">添加常用药</button>
+          </view>
+
+          <block wx:else>
+            <view wx:if="{{!slots.length}}" class="card med-empty">
+              <view class="med-empty-copy">今天没有需要记录的时间点。</view>
+            </view>
+            <view wx:for="{{slots}}" wx:key="time" wx:for-item="slot" id="{{slot.id}}" class="card slot-card">
+              <view class="slot-time num">{{slot.time}}</view>
+              <view wx:for="{{slot.items}}" wx:key="medicationId" class="slot-row">
+                <view class="slot-name">{{item.name}}</view>
+                <button class="take-btn {{item.stateClass}}" disabled="{{busyKey === item.key}}" aria-label="{{slot.time}} {{item.name}}，{{item.taken ? '已吃，再点一下可以撤销' : '还没记，点一下记为已吃'}}" data-slot="{{slot.time}}" data-id="{{item.medicationId}}" bindtap="toggleTaken"><text class="take-text">{{item.stateText}}</text><text class="take-icon">{{item.stateIcon}}</text></button>
+              </view>
+            </view>
+            <view wx:if="{{reminderNote && reminderEnabled}}" class="med-note">{{reminderNote}}</view>
+            <button wx:elif="{{reminderNote}}" class="med-note med-note-link" bindtap="goReminders">{{reminderNote}}<text class="med-note-arrow">›</text></button>
+          </block>
+
+          <view class="sec-label med-sec-label">我的常用药</view>
+          <view wx:if="{{hasMedications}}" class="card med-list">
+            <view wx:for="{{medications}}" wx:key="id" class="med-row">
+              <view class="med-main">
+                <view class="med-name">{{item.name}}</view>
+                <view class="med-times num">每天 {{item.timesText}}</view>
+              </view>
+              <button class="med-act" aria-label="修改 {{item.name}}" data-id="{{item.id}}" bindtap="openEdit">修改</button>
+              <button class="med-act med-act-danger" aria-label="删除 {{item.name}}" data-id="{{item.id}}" bindtap="removeItem">删除</button>
+            </view>
+          </view>
+          <button wx:if="{{hasMedications}}" class="btn ghost med-add" bindtap="openAdd">{{canAdd ? '＋ 添加常用药' : '常用药最多 8 种'}}</button>
+        </block>
+
+        <view class="foot-note med-footer">{{footerText}}</view>
+      </scroll-view>
+    </view>
+
+    <view class="mask {{sheetOn}}" bindtap="closeSheet"></view>
+    <view class="sheet {{sheetOn}}">
+      <view class="sheet-h"><text class="t">{{sheetTitle}}</text><button class="x" disabled="{{saving}}" aria-label="关闭" bindtap="closeSheet">×</button></view>
+      <view class="sheet-body med-sheet-body">
+        <view class="f-label med-label">药名</view>
+        <input class="note-in med-name-in" type="text" maxlength="20" value="{{formName}}" placeholder="自己填写，最多 20 字" aria-label="药名" bindinput="onNameInput" />
+        <view class="f-label med-label">每天什么时候吃<text class="hint">最多 4 个</text></view>
+        <view class="med-time-list">
+          <view wx:for="{{formTimes}}" wx:key="key" class="med-time-row">
+            <picker class="med-time-picker" mode="time" value="{{item.value}}" disabled="{{saving}}" aria-label="服药时间 {{item.value}}" data-index="{{index}}" bindchange="onTimeChange">
+              <view class="med-time-cell"><text class="time-label">时间 {{index + 1}}</text><text class="time-value num">{{item.value}}</text><text class="time-arrow">›</text></view>
+            </picker>
+            <button class="med-time-remove" disabled="{{saving || !canRemoveTime}}" aria-label="去掉时间 {{item.value}}" data-index="{{index}}" bindtap="removeTime">去掉</button>
+          </view>
+          <button wx:if="{{canAddTime}}" class="btn line med-time-add" disabled="{{saving}}" bindtap="addTime">＋ 加一个时间</button>
+        </view>
+        <view wx:if="{{firstSaveHelp}}" class="med-help">{{firstSaveHelp}}</view>
+        <button class="btn primary med-save" loading="{{saving}}" disabled="{{saving}}" bindtap="saveForm">保存</button>
+        <view class="foot-note">{{footerText}}</view>
+      </view>
+    </view>
+  </view>
+</view>

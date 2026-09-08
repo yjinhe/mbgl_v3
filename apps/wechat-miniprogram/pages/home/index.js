@@ -19,6 +19,7 @@ const {
   reportSubscriptions,
   requestSubscribe
 } = require('../../utils/reminders');
+const { loadMedications, pendingCount } = require('../../utils/medications');
 const {
   clearRecordReturnPath,
   setRecordMetric,
@@ -80,6 +81,7 @@ Page({
     pendingRecordAfterLoad: false,
     reminderQuotaEmpty: false,
     reminderPreparing: false,
+    medicationPending: 0,
     tab: 'home',
     homeOn: 'on',
     historyOn: '',
@@ -113,6 +115,8 @@ Page({
       // Saving a record may have topped up quota; the reminders cache is
       // invalidated after that report, so this stays cheap otherwise.
       this.syncReminderQuota();
+      // Likewise a check-in on the medications page updates its cache.
+      this.syncMedicationPending();
     }
     if (data && this.data.pendingRecordAfterLoad && !this.data.pendingRecordError) {
       await this.savePendingRecord();
@@ -537,10 +541,29 @@ Page({
     if (isDemo) {
       this._reminders = null;
       if (this.data.reminderQuotaEmpty) this.setData({ reminderQuotaEmpty: false });
+      if (this.data.medicationPending) this.setData({ medicationPending: 0 });
     } else {
       this.syncReminderQuota();
+      this.syncMedicationPending();
     }
     return data;
+  },
+
+  // Medication spec §3.5: how many (time, medication) pairs are still
+  // unticked today. Shown above the quota row, never in guest mode.
+  syncMedicationPending() {
+    const token = getToken();
+    if (!token) return Promise.resolve(null);
+    return loadMedications().then((state) => {
+      if (getToken() !== token) return null;
+      const pending = pendingCount(state.today);
+      if (pending !== this.data.medicationPending) this.setData({ medicationPending: pending });
+      return state;
+    }).catch(() => null);
+  },
+
+  goMedications() {
+    wx.navigateTo({ url: '/pages/medications/index' });
   },
 
   // Spec §3.4: when an enabled plan has no quota left, offer a one-tap

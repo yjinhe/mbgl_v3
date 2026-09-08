@@ -2,6 +2,7 @@
 .report-heading { font-size: 36rpx; line-height: 1.5; font-weight: 700; }
 .report-range { margin-top: 12rpx; font-size: 24rpx; color: var(--ink-2); }
 .report-tip { margin-top: 20rpx; padding: 20rpx; background: var(--brand-soft); border-radius: 12rpx; font-size: 26rpx; line-height: 1.6; }
+.report-medication { margin-top: 16rpx; padding: 20rpx; background: var(--card); border: 1rpx solid var(--line); border-radius: 12rpx; color: var(--ink); font-size: 28rpx; line-height: 1.6; }
 .page-controls { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; margin: 26rpx 0 18rpx; font-size: 28rpx; }
 .page-controls button { min-height: 96rpx; padding: 20rpx; color: var(--brand-deep); background: white; border: 1rpx solid var(--line); border-radius: 12rpx; font-size: 28rpx; }
 .page-controls button[disabled] { color: #9AA7A2; background: #EAEFEB; }

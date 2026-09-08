@@ -3,6 +3,7 @@ const { captureDataLease, isDataLeaseCurrent } = require('../../utils/data-cache
 const { doLogin, ensureLogin, friendlyErrorMessage, handleRequestError } = require('../../utils/page');
 const { glucosePeriods, periodNames } = require('../../utils/metrics');
 const {
+  hasPlanTime,
   hasTemplates,
   loadReminders,
   metricName,
@@ -17,6 +18,7 @@ const {
 // Same option list as the record page's glucose period chips, with the full
 // labels because a native picker has room for them.
 const PERIOD_LABELS = glucosePeriods.map((key) => periodNames[key]);
+const MEDICATION_SUB_TEXT = '按常用药里的时间提醒';
 
 Page({
   data: {
@@ -71,14 +73,19 @@ Page({
 
   cardFor(metric, plan) {
     const isGlucose = metric === 'glucose';
+    const hasTime = hasPlanTime(metric);
     const periodIndex = isGlucose ? Math.max(0, glucosePeriods.indexOf(plan.period)) : -1;
     return {
       metric,
       name: metricName(metric),
       isGlucose,
+      // Medication reminders follow the times on each medication, so the
+      // card is just a switch (spec §3.4).
+      hasTime,
+      subText: hasTime ? '' : MEDICATION_SUB_TEXT,
       enabled: plan.enabled,
       switchClass: plan.enabled ? 'on' : '',
-      statusText: plan.enabled ? `已开启 · 每天 ${plan.time}` : '未开启',
+      statusText: plan.enabled ? (hasTime ? `已开启 · 每天 ${plan.time}` : '已开启') : '未开启',
       time: plan.time,
       period: isGlucose ? glucosePeriods[periodIndex] : null,
       periodText: isGlucose ? PERIOD_LABELS[periodIndex] : '',
@@ -150,6 +157,7 @@ Page({
   successMessage(metric, plan, mode) {
     const name = metricName(metric);
     if (mode === 'disable' || !plan.enabled) return mode === 'disable' ? `已关闭${name}提醒` : '已保存，打开开关后生效';
+    if (!hasPlanTime(metric)) return `已开启，${MEDICATION_SUB_TEXT}您`;
     if (mode === 'enable') return `已开启，每天 ${plan.time} 提醒您测${name}`;
     return `已保存，每天 ${plan.time} 提醒您测${name}`;
   },

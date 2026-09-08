@@ -10,6 +10,7 @@ const {
 const { doLogin, loadMe, logoutToLogin } = require('../../utils/page');
 const { hasConsent, openPrivacyContract } = require('../../utils/privacy');
 const { hasTemplates, loadReminders, planSummary } = require('../../utils/reminders');
+const { loadMedications, medicationSummary } = require('../../utils/medications');
 const { syncTabBar } = require('../../utils/tabbar');
 
 const MINE_CACHE_DOMAINS = ['records', 'profile'];
@@ -48,6 +49,7 @@ Page({
     consentChecked: false,
     remindersAvailable: false,
     reminderSummary: '未开启',
+    medicationSummary: '未添加',
     navStyle: ''
   },
 
@@ -66,7 +68,10 @@ Page({
     }
     // The reminders page invalidates its cache after every change, so this
     // is cheap when nothing changed and current when something did.
-    if (this.data.authed) this.loadReminderSummary();
+    if (this.data.authed) {
+      this.loadReminderSummary();
+      this.loadMedicationSummary();
+    }
   },
 
   // Sub text for the "测量提醒" cell; the cell is hidden when the server
@@ -91,6 +96,23 @@ Page({
     wx.navigateTo({ url: '/pages/reminders/index' });
   },
 
+  // Sub text for the "我的常用药" cell: 'N 种' or '未添加'. The medications
+  // page invalidates its cache after every change.
+  loadMedicationSummary() {
+    const token = getToken();
+    if (!token) return Promise.resolve(null);
+    return loadMedications().then((state) => {
+      if (getToken() !== token) return null;
+      const summary = medicationSummary(state.medications);
+      if (summary !== this.data.medicationSummary) this.setData({ medicationSummary: summary });
+      return state;
+    }).catch(() => null);
+  },
+
+  goMedications() {
+    wx.navigateTo({ url: '/pages/medications/index' });
+  },
+
   async login() {
     if (!this.data.consentChecked) {
       wx.showToast({ title: '请先阅读并同意用户协议和隐私政策', icon: 'none' });
@@ -110,7 +132,7 @@ Page({
     if (me === false || !isDataLeaseCurrent(lease, getToken())) return;
     if (!me) {
       if (this.data.authed || this.data.loading || this.data.me) {
-        this.setData({ authed: false, loading: false, me: null, remindersAvailable: false, reminderSummary: '未开启' });
+        this.setData({ authed: false, loading: false, me: null, remindersAvailable: false, reminderSummary: '未开启', medicationSummary: '未添加' });
       }
       this.markDataFresh();
       return;
@@ -118,6 +140,7 @@ Page({
     this.applyMe(me);
     this.markDataFresh();
     this.loadReminderSummary();
+    this.loadMedicationSummary();
   },
 
   applyMe(me) {

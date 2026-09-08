@@ -33,6 +33,19 @@
   line-height: 1.5;
 }
 
+.medication-pending {
+  width: 100%;
+  min-height: 96rpx;
+  text-align: left;
+}
+
+.medication-pending-arrow {
+  flex: none;
+  color: var(--brand-deep);
+  font-size: 36rpx;
+  font-weight: 650;
+}
+
 .reminder-quota-btn {
   width: auto;
   min-width: 168rpx;

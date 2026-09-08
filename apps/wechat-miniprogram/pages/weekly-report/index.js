@@ -10,7 +10,7 @@ Page({
   data: {
     authed: false, loading: false, generating: false, saving: false, error: '', imageError: '',
     navStyle: '', rangeText: '', totalRecords: 0, pageCount: 0, pageIndex: 0,
-    sectionTitle: '', imagePath: '', canvasHeight: 1600
+    sectionTitle: '', imagePath: '', canvasHeight: 1600, medicationText: ''
   },
 
   onLoad() {
@@ -32,7 +32,7 @@ Page({
     this._lease = captureDataLease(getToken(), ['records', 'profile']);
     this._images = {};
     this._pages = [];
-    this.setData({ loading: true, error: '', imageError: '', imagePath: '', pageCount: 0, totalRecords: 0 });
+    this.setData({ loading: true, error: '', imageError: '', imagePath: '', pageCount: 0, totalRecords: 0, medicationText: '' });
     let requestToken = '';
     try {
       const authed = await ensureLogin(this);
@@ -51,7 +51,7 @@ Page({
       if (!this.isCurrent(seq)) return;
       const result = buildWeeklyPages(report, { unit: me && me.unit || 'mmol', nickname: me && me.nickname || '', demo: !authed });
       this._pages = result.pages;
-      this.setData({ rangeText: result.rangeText, totalRecords: result.totalRecords, pageCount: result.pages.length, pageIndex: 0 });
+      this.setData({ rangeText: result.rangeText, totalRecords: result.totalRecords, pageCount: result.pages.length, pageIndex: 0, medicationText: result.medicationText || '' });
       if (result.pages.length) await this.renderCurrent();
     } catch (error) {
       if (!this.isCurrent(seq)) return;

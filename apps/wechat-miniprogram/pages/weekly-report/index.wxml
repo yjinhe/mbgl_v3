@@ -6,6 +6,7 @@
     <block wx:elif="{{pageCount}}">
       <view class="report-heading">近7天 · 共 {{totalRecords}} 条</view><view class="report-range">{{rangeText}} · 北京时间</view>
       <view class="report-tip">共 {{pageCount}} 张图片，按指标和时段分别整理。可逐张查看后，自行选择发送给谁。</view>
+      <view wx:if="{{medicationText}}" class="report-medication">{{medicationText}}（在最后一张图片上）</view>
       <view class="page-controls"><button disabled="{{pageIndex === 0 || generating}}" data-step="-1" bindtap="changePage">上一张</button><text>第 {{pageIndex + 1}} / {{pageCount}} 张</text><button disabled="{{pageIndex + 1 >= pageCount || generating}}" data-step="1" bindtap="changePage">下一张</button></view>
       <view class="section-label">{{sectionTitle}}</view>
       <view wx:if="{{generating}}" class="card state-card">正在生成大字图片…</view>

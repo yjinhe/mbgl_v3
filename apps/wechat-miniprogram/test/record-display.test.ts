@@ -38,6 +38,10 @@ function pageFor(name: string, overrides: Record<string, unknown> = {}) {
       reportSubscriptions: async () => null
     },
     '../../utils/record-draft': cjs('utils/record-draft.js'),
+    '../../utils/medications': {
+      loadMedications: async () => ({ medications: [], today: { day: '', slots: [] }, reminder: { enabled: false, quota: 0 }, template: '' }),
+      pendingCount: () => 0
+    },
     '../../utils/avatar': {},
     '../../utils/privacy': {},
     '../../utils/demo': {},

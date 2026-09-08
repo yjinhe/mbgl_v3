@@ -26,7 +26,8 @@
               </view>
               <button class="switch reminder-switch {{item.switchClass}}" disabled="{{busyMetric === item.metric}}" aria-label="{{item.name}}提醒{{item.enabled ? '已开启' : '未开启'}}" data-metric="{{item.metric}}" bindtap="toggleReminder"><text>{{item.enabled ? '开' : '关'}}</text><view class="switch-knob"></view></button>
             </view>
-            <picker class="reminder-picker" mode="time" value="{{item.time}}" disabled="{{busyMetric === item.metric}}" aria-label="{{item.name}}提醒时间 {{item.time}}" data-metric="{{item.metric}}" bindchange="onTimeChange">
+            <view wx:if="{{!item.hasTime}}" class="reminder-row reminder-sub">{{item.subText}}</view>
+            <picker wx:if="{{item.hasTime}}" class="reminder-picker" mode="time" value="{{item.time}}" disabled="{{busyMetric === item.metric}}" aria-label="{{item.name}}提醒时间 {{item.time}}" data-metric="{{item.metric}}" bindchange="onTimeChange">
               <view class="reminder-row"><text class="reminder-label">提醒时间</text><text class="reminder-value num">{{item.time}}</text><text class="reminder-arrow">›</text></view>
             </picker>
             <picker wx:if="{{item.isGlucose}}" class="reminder-picker" mode="selector" range="{{periodLabels}}" value="{{item.periodIndex}}" disabled="{{busyMetric === item.metric}}" aria-label="血糖测量时段 {{item.periodText}}" data-metric="{{item.metric}}" bindchange="onPeriodChange">
