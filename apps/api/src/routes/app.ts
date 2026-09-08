@@ -35,6 +35,20 @@ import {
   serializePlan,
   upsertPlan
 } from '../services/reminders.js';
+import {
+  MEDICATION_NAME_MAX,
+  MEDICATION_TIMES_MAX,
+  MedicationLimitError,
+  archiveMedication,
+  checkin,
+  createMedication,
+  deleteUserMedications,
+  listMedications,
+  normalizeTimes,
+  todayView,
+  updateMedication,
+  weeklyMedicationSection
+} from '../services/medications.js';
 import { hashPassword, verifyPassword } from '../services/password.js';
 import { inferBpPeriod, inferGlucosePeriod, localDayKey, validateGlucoseTarget, type GlucosePeriod, type Metric } from '@tangji/shared';
 
@@ -56,7 +70,7 @@ const pageQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(100)
 });
-const reminderMetricSchema = z.enum(['glucose', 'bp']);
+const reminderMetricSchema = z.enum(['glucose', 'bp', 'medication']);
 const reminderPlanSchema = z.object({
   enabled: z.boolean(),
   time: z.string().regex(REMINDER_TIME_PATTERN, '提醒时间不正确').optional(),
@@ -64,6 +78,16 @@ const reminderPlanSchema = z.object({
 }).strict();
 const reminderSubscriptionsSchema = z.object({
   accepted: z.array(reminderMetricSchema).max(10)
+}).strict();
+const medicationNameSchema = z.string().trim().min(1, '请输入药名').max(MEDICATION_NAME_MAX, `药名最多 ${MEDICATION_NAME_MAX} 字`);
+const medicationTimesSchema = z.array(z.string().regex(REMINDER_TIME_PATTERN, '服药时间不正确')).min(1, '请至少选择一个时间').max(MEDICATION_TIMES_MAX, `每天最多 ${MEDICATION_TIMES_MAX} 个时间`);
+const medicationCreateSchema = z.object({ name: medicationNameSchema, times: medicationTimesSchema }).strict();
+const medicationUpdateSchema = z.object({ name: medicationNameSchema.optional(), times: medicationTimesSchema.optional() }).strict();
+const medicationCheckinSchema = z.object({
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期不正确'),
+  slot: z.string().regex(REMINDER_TIME_PATTERN, '服药时间不正确'),
+  medicationId: z.string().min(1),
+  taken: z.boolean()
 }).strict();
 
 async function currentUser(app: FastifyInstance, auth: AppToken) {
@@ -336,6 +360,7 @@ export async function appRoutes(app: FastifyInstance) {
       await tx.bpRecord.deleteMany({ where: { userId: user.id } });
       await tx.lipidRecord.deleteMany({ where: { userId: user.id } });
       await tx.uricRecord.deleteMany({ where: { userId: user.id } });
+      await deleteUserMedications(tx, user.id);
       await deleteUserReminders(tx, user.id);
       await tx.user.update({
         where: { id: user.id },
@@ -348,11 +373,7 @@ export async function appRoutes(app: FastifyInstance) {
   app.get('/reminders', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request) => {
     const user = await currentUser(app, request.auth as AppToken);
     const plans = await listPlans(app.prisma, user.id);
-    // Template ids come from server config so the mini program never hardcodes them; unconfigured metrics are omitted.
-    const templates: { glucose?: string; bp?: string } = {};
-    if (config.reminderTemplates.glucose) templates.glucose = config.reminderTemplates.glucose.id;
-    if (config.reminderTemplates.bp) templates.bp = config.reminderTemplates.bp.id;
-    return { plans: plans.map(serializePlan), templates };
+    return { plans: plans.map(serializePlan), templates: reminderTemplateIds() };
   });
 
   app.put('/reminders/:metric', {
@@ -361,6 +382,10 @@ export async function appRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const metric = reminderMetricSchema.parse((request.params as any).metric);
     const body = reminderPlanSchema.parse(request.body);
+    // Medication reminders fire at the times of each medication (medication spec §3.4): the plan only carries the switch.
+    if (metric === 'medication' && (body.time !== undefined || body.period !== undefined)) {
+      return validationError(reply, '服药提醒按常用药里的时间提醒，不需要单独设置');
+    }
     if (metric === 'bp' && body.period !== undefined) return validationError(reply, '血压提醒不需要测量时段');
     if (body.period !== undefined && !GLUCOSE_PERIODS.has(body.period)) return validationError(reply, '测量时段不正确');
     const user = await currentUser(app, request.auth as AppToken);
@@ -381,6 +406,86 @@ export async function appRoutes(app: FastifyInstance) {
     const user = await currentUser(app, request.auth as AppToken);
     const plans = await addSubscriptionQuota(app.prisma, user.id, body.accepted);
     return { plans: plans.map(serializePlan) };
+  });
+
+  app.get('/medications', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request) => {
+    const user = await currentUser(app, request.auth as AppToken);
+    const [medications, today, plan] = await Promise.all([
+      listMedications(app.prisma, user.id),
+      todayView(app.prisma, user.id, localDayKey(new Date())),
+      app.prisma.reminderPlan.findUnique({ where: { userId_metric: { userId: user.id, metric: 'medication' } } })
+    ]);
+    const template = config.reminderTemplates.medication?.id;
+    return {
+      medications,
+      today,
+      reminder: { enabled: plan?.enabled ?? false, quota: plan?.quota ?? 0 },
+      ...(template ? { template } : {})
+    };
+  });
+
+  app.post('/medications', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const body = medicationCreateSchema.parse(request.body);
+    const times = normalizeTimes(body.times);
+    if (!times) return validationError(reply, '服药时间不正确');
+    const user = await currentUser(app, request.auth as AppToken);
+    try {
+      const medication = await createMedication(app.prisma, user.id, { name: body.name, times });
+      return reply.code(201).send({ medication });
+    } catch (error) {
+      if (error instanceof MedicationLimitError) {
+        return reply.code(422).send({ error: { code: error.code, message: error.message } });
+      }
+      throw error;
+    }
+  });
+
+  app.patch('/medications/:id', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const body = medicationUpdateSchema.parse(request.body);
+    const times = body.times === undefined ? undefined : normalizeTimes(body.times);
+    if (times === null) return validationError(reply, '服药时间不正确');
+    const user = await currentUser(app, request.auth as AppToken);
+    const medication = await updateMedication(app.prisma, user.id, String((request.params as any).id), {
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(times !== undefined ? { times } : {})
+    });
+    if (!medication) return notFound(reply);
+    return { medication };
+  });
+
+  app.delete('/medications/:id', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const user = await currentUser(app, request.auth as AppToken);
+    const archived = await archiveMedication(app.prisma, user.id, String((request.params as any).id));
+    if (!archived) return notFound(reply);
+    return reply.code(204).send();
+  });
+
+  app.post('/medications/checkins', {
+    preHandler: (req, reply) => requireAuth(req, reply, 'app'),
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const body = medicationCheckinSchema.parse(request.body);
+    const user = await currentUser(app, request.auth as AppToken);
+    const result = await checkin(app.prisma, user.id, body);
+    switch (result.status) {
+      case 'ok':
+        return { today: result.today };
+      case 'not_today':
+        return validationError(reply, '只能记录今天的服药情况', { day: [result.today] });
+      case 'not_found':
+        return notFound(reply);
+      case 'invalid_slot':
+        return validationError(reply, '这个时间不在该药的服药时间里');
+    }
   });
 
   app.get('/overview', { preHandler: (req, reply) => requireAuth(req, reply, 'app') }, async (request) => {
@@ -617,21 +722,33 @@ export async function appRoutes(app: FastifyInstance) {
   });
 }
 
+function reminderTemplateIds() {
+  // Template ids come from server config so the mini program never hardcodes them; unconfigured metrics are omitted.
+  const templates: { glucose?: string; bp?: string; medication?: string } = {};
+  if (config.reminderTemplates.glucose) templates.glucose = config.reminderTemplates.glucose.id;
+  if (config.reminderTemplates.bp) templates.bp = config.reminderTemplates.bp.id;
+  if (config.reminderTemplates.medication) templates.medication = config.reminderTemplates.medication.id;
+  return templates;
+}
+
 async function weeklyReport(app: FastifyInstance, user: any) {
   const rangeDays = 7;
   const toDate = new Date();
   const fromDate = recordRange(rangeDays, toDate).gte;
-  const [glucose, bp, lipid, uric] = await Promise.all([
+  const [glucose, bp, lipid, uric, medication] = await Promise.all([
     statsForMetric(app.prisma, user.id, user, 'glucose', rangeDays),
     statsForMetric(app.prisma, user.id, user, 'bp', rangeDays),
     weeklyLipidSection(app, user, fromDate, toDate),
-    statsForMetric(app.prisma, user.id, user, 'uric', rangeDays)
+    statsForMetric(app.prisma, user.id, user, 'uric', rangeDays),
+    weeklyMedicationSection(app.prisma, user.id, fromDate, toDate)
   ]);
   const sections: Record<string, unknown> = {};
   if (glucose.n > 0) sections.glucose = glucose;
   if (bp.n > 0) sections.bp = bp;
   if (lipid.n > 0) sections.lipid = lipid;
   if (uric.n > 0) sections.uric = uric;
+  // Medication spec §3.6: omitted when nothing was planned, so the report page hides the row.
+  if (medication.planned > 0) sections.medication = medication;
   return {
     title: '近 7 天健康报告',
     rangeDays,

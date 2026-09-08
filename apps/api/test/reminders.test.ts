@@ -92,7 +92,11 @@ describe('reminder plan API', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
       plans: [],
-      templates: { glucose: 'test-glucose-reminder-template', bp: 'test-bp-reminder-template' }
+      templates: {
+        glucose: 'test-glucose-reminder-template',
+        bp: 'test-bp-reminder-template',
+        medication: 'test-medication-reminder-template'
+      }
     });
   });
 

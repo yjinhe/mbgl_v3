@@ -87,6 +87,23 @@ async function ensureDevSchemaUpgrades() {
     "errcode" INTEGER, "errmsg" TEXT
   )`);
   await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "ReminderLog_userId_scheduledDay_idx" ON "ReminderLog"("userId", "scheduledDay")');
+  const reminderLogColumns = await prisma.$queryRawUnsafe<Array<{ name: string }>>('PRAGMA table_info("ReminderLog")');
+  if (!reminderLogColumns.some((column) => column.name === 'slot')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "ReminderLog" ADD COLUMN "slot" TEXT');
+  }
+  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "Medication" (
+    "id" TEXT NOT NULL PRIMARY KEY, "userId" TEXT NOT NULL, "name" TEXT NOT NULL, "times" TEXT NOT NULL,
+    "archivedAt" DATETIME, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME NOT NULL,
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`);
+  await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "Medication_userId_archivedAt_idx" ON "Medication"("userId", "archivedAt")');
+  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "MedicationLog" (
+    "id" TEXT NOT NULL PRIMARY KEY, "userId" TEXT NOT NULL, "medicationId" TEXT NOT NULL,
+    "day" TEXT NOT NULL, "slot" TEXT NOT NULL, "takenAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY ("medicationId") REFERENCES "Medication"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`);
+  await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "MedicationLog_medicationId_day_slot_key" ON "MedicationLog"("medicationId", "day", "slot")');
+  await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "MedicationLog_userId_day_idx" ON "MedicationLog"("userId", "day")');
   await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "User_loginName_key" ON "User"("loginName")');
   await migrateLegacyDemoIdentity();
   await ensureDevWebAccount();

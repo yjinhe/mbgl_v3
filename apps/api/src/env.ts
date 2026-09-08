@@ -61,7 +61,8 @@ function miniprogramStateEnv(): MiniprogramState {
 
 const reminderTemplates = {
   glucose: templateEnv('WECHAT_TEMPLATE_GLUCOSE_REMINDER', 'WECHAT_TEMPLATE_GLUCOSE_FIELDS', 'time1,thing2,thing3', 3),
-  bp: templateEnv('WECHAT_TEMPLATE_BP_REMINDER', 'WECHAT_TEMPLATE_BP_FIELDS', 'time1,thing2', 2)
+  bp: templateEnv('WECHAT_TEMPLATE_BP_REMINDER', 'WECHAT_TEMPLATE_BP_FIELDS', 'time1,thing2', 2),
+  medication: templateEnv('WECHAT_TEMPLATE_MEDICATION_REMINDER', 'WECHAT_TEMPLATE_MEDICATION_FIELDS', 'time1,thing2,thing3', 3)
 };
 const miniprogramState = miniprogramStateEnv();
 

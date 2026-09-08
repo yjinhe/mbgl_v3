@@ -34,6 +34,7 @@ model User {
   binding       PharmacyCustomer[]
   submissions   RecordSubmission[]
   reminders     ReminderPlan[]
+  medications   Medication[]
 }
 
 model RecordSubmission {
@@ -52,12 +53,12 @@ model RecordSubmission {
 model ReminderPlan {
   id          String   @id @default(cuid())
   userId      String
-  metric      String // 'glucose' | 'bp'
+  metric      String // 'glucose' | 'bp' | 'medication'
   enabled     Boolean  @default(false)
-  time        String // 'HH:mm', Asia/Shanghai
-  period      String? // glucose period, null for bp
+  time        String // 'HH:mm', Asia/Shanghai; fixed '00:00' and unused for medication
+  period      String? // glucose period, null for bp and medication
   quota       Int      @default(0) // remaining one-time subscription sends
-  lastSentDay String? // 'YYYY-MM-DD', Asia/Shanghai, prevents same-day resend
+  lastSentDay String? // 'YYYY-MM-DD', Asia/Shanghai, prevents same-day resend (unused for medication, see ReminderLog.slot)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -69,14 +70,42 @@ model ReminderLog {
   id           String   @id @default(cuid())
   userId       String
   metric       String
-  templateKey  String // 'glucose_reminder' | 'bp_reminder'
+  templateKey  String // 'glucose_reminder' | 'bp_reminder' | 'medication_reminder'
   scheduledDay String // 'YYYY-MM-DD'
+  slot         String? // 'HH:mm', medication reminders only: one row per (user, day, slot) whatever the outcome
   sentAt       DateTime @default(now())
   ok           Boolean
   errcode      Int?
   errmsg       String?
 
   @@index([userId, scheduledDay])
+}
+
+model Medication {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String // ≤ 20 chars, typed by the user
+  times      String // JSON array of 'HH:mm', 1-4 entries, deduplicated and ascending
+  archivedAt DateTime? // deleting archives, so check-in history stays available for reports
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs       MedicationLog[]
+
+  @@index([userId, archivedAt])
+}
+
+model MedicationLog {
+  id           String     @id @default(cuid())
+  userId       String
+  medicationId String
+  day          String // 'YYYY-MM-DD', Asia/Shanghai
+  slot         String // 'HH:mm'
+  takenAt      DateTime   @default(now())
+  medication   Medication @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+
+  @@unique([medicationId, day, slot])
+  @@index([userId, day])
 }
 
 model GlucoseRecord {

@@ -26,7 +26,7 @@ void cleanupRecycleBin();
 async function sendMeasurementReminders() {
   try {
     const result = await runReminderTick(app.prisma, { now: new Date(), fetch, config, log: app.log });
-    if (result.due > 0) app.log.info(result, 'Measurement reminder tick completed');
+    if (result.due > 0 || result.medicationDue > 0) app.log.info(result, 'Reminder tick completed');
   } catch (error) {
     app.log.error({ err: error }, 'Measurement reminder tick failed');
   }
@@ -41,7 +41,7 @@ if (remindersConfigured(config)) {
     noOverlap: true
   });
 } else {
-  app.log.warn('Measurement reminders disabled: set WECHAT_APPID/WECHAT_SECRET and WECHAT_TEMPLATE_GLUCOSE_REMINDER or WECHAT_TEMPLATE_BP_REMINDER');
+  app.log.warn('Measurement reminders disabled: set WECHAT_APPID/WECHAT_SECRET and WECHAT_TEMPLATE_GLUCOSE_REMINDER, WECHAT_TEMPLATE_BP_REMINDER or WECHAT_TEMPLATE_MEDICATION_REMINDER');
 }
 
 async function shutdown(signal: string) {
