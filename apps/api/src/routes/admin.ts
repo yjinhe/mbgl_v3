@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth, type AdminToken } from '../plugins/auth.js';
 import { hashPassword, isStrongPassword, verifyPassword } from '../services/password.js';
 import { adminUserRecords, listAdminUsers } from '../services/admin-users.js';
+import { localDayKey } from '@tangji/shared';
 
 const strongPasswordSchema = z.string().min(12).max(128).refine(isStrongPassword, {
   message: '密码至少 12 位，且需包含大小写字母、数字和符号'
@@ -76,8 +77,7 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   app.get('/stats', async () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = new Date(`${localDayKey(new Date())}T00:00:00+08:00`);
     const [pharmacyTotal, customerTotal, g, b, l, u] = await Promise.all([
       app.prisma.pharmacy.count(),
       app.prisma.pharmacyCustomer.count({ where: { unboundAt: null } }),

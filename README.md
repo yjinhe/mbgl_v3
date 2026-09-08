@@ -12,6 +12,8 @@ DATABASE_URL="file:./dev.db" pnpm --filter @tangji/api seed
 pnpm dev
 ```
 
+API 启动前必须在 shell 环境中提供 `JWT_SECRET`（无默认值，缺失直接报错）；本地 mock 微信登录需显式设置 `WECHAT_MOCK=true`（默认关闭）。API 不会自动读取 `.env` 文件，可先 `cp .env.example .env`，再执行 `set -a; source .env; set +a` 后运行 `pnpm dev`。
+
 生产环境只执行 migration，不会自动 seed。演示 seed 会清空现有业务数据，只能用于一次性开发数据库。
 
 ## 演示账号

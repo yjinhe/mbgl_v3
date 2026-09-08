@@ -246,6 +246,8 @@ describe('app records', () => {
 
   test('rejects missing token and invalid glucose without inserting', async () => {
     await request(app.server).get('/api/app/me').expect(401);
+    await request(app.server).get('/api/pharmacy/dashboard').expect(401);
+    await request(app.server).get('/api/pharmacy/dashboard?x=/auth/login').expect(401);
     const before = await prisma.glucoseRecord.count({ where: { userId } });
     await request(app.server)
       .post('/api/app/records/glucose')
@@ -451,11 +453,22 @@ describe('binding and alerts', () => {
       .set('Authorization', `Bearer ${pharmacyToken}`)
       .send({ metric: 'bp', recordId: bp.record.id, note: '已电话提醒复测' })
       .expect(200);
-    await request(app.server)
+    const repeated = await request(app.server)
       .post('/api/pharmacy/alerts/follow-up')
       .set('Authorization', `Bearer ${pharmacyToken}`)
       .send({ metric: 'bp', recordId: bp.record.id, note: '重复' })
       .expect(200);
+    expect(repeated.body.followUp.note).toBe('重复');
+    expect(await prisma.followUp.count({ where: { pharmacyId, metric: 'bp', recordId: bp.record.id } })).toBe(1);
+    const deleted = await prisma.bpRecord.create({
+      data: { userId, sbp: 190, dbp: 120, period: 'morning', measuredAt: new Date(), tags: '[]', note: '', deletedAt: new Date() }
+    });
+    await request(app.server)
+      .post('/api/pharmacy/alerts/follow-up')
+      .set('Authorization', `Bearer ${pharmacyToken}`)
+      .send({ metric: 'bp', recordId: deleted.id, note: '已删除记录不可跟进' })
+      .expect(403);
+    expect(await prisma.followUp.count({ where: { metric: 'bp', recordId: deleted.id } })).toBe(0);
   });
 
   test('database allows only one active pharmacy binding per user', async () => {
