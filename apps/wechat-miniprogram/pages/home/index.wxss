@@ -1,7 +1,16 @@
+/* Greeting block: the streak banner and today's notices stack as one group with a 16rpx rhythm,
+   all full width and on the same 24rpx radius, so a notice reads as a sibling of the banner
+   rather than a stray pill. The banner keeps the warm "肯定" colours; notices are white to-do rows. */
+.home-top {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-bottom: 34rpx;
+}
+
 .home-streak {
   width: 100%;
   min-height: 104rpx;
-  margin-bottom: 34rpx;
   padding: 20rpx 24rpx;
   border-radius: 24rpx;
   font-size: 26rpx;
@@ -14,44 +23,58 @@
   flex: none;
 }
 
-.reminder-quota {
-  margin: -18rpx 0 34rpx;
-  padding: 20rpx 24rpx;
+.home-notice {
+  width: 100%;
+  min-height: 104rpx;
+  padding: 16rpx 24rpx 16rpx 16rpx;
   border-radius: 24rpx;
   display: flex;
   align-items: center;
   gap: 16rpx;
-  background: var(--brand-soft);
+  background: var(--card);
+  border: 1rpx solid var(--line);
+  box-shadow: 0 2rpx 4rpx rgba(22, 48, 43, .05), 0 12rpx 36rpx rgba(22, 48, 43, .05);
 }
 
-.reminder-quota-copy {
+.home-notice-hover {
+  background: var(--paper);
+}
+
+.home-notice.busy {
+  opacity: .72;
+}
+
+.home-notice-icon {
+  width: 68rpx;
+  height: 68rpx;
+  flex: none;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.home-notice-icon image {
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.home-notice-copy {
   flex: 1;
   min-width: 0;
-  color: var(--brand-deep);
-  font-size: 26rpx;
-  font-weight: 650;
-  line-height: 1.5;
-}
-
-.medication-pending {
-  width: 100%;
-  min-height: 96rpx;
-  text-align: left;
-}
-
-.medication-pending-arrow {
-  flex: none;
-  color: var(--brand-deep);
-  font-size: 36rpx;
-  font-weight: 650;
-}
-
-.reminder-quota-btn {
-  width: auto;
-  min-width: 168rpx;
-  flex: none;
-  padding: 0 28rpx;
+  color: var(--ink);
   font-size: 28rpx;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.home-notice-action {
+  flex: none;
+  color: var(--brand);
+  font-size: 28rpx;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .home-section-title {

@@ -39,19 +39,23 @@
           </view>
         </view>
 
-        <view class="streak home-streak">
-          <image class="streak-icon" src="/assets/home-icons/streak.png" mode="aspectFit" />
-          <text>{{streakMessage}}</text>
-        </view>
+        <view class="home-top">
+          <view class="streak home-streak">
+            <image class="streak-icon" src="/assets/home-icons/streak.png" mode="aspectFit" />
+            <text>{{streakMessage}}</text>
+          </view>
 
-        <button wx:if="{{authed && medicationPending > 0}}" class="reminder-quota medication-pending" aria-label="今天还有 {{medicationPending}} 次药没记，去我的常用药" bindtap="goMedications">
-          <text class="reminder-quota-copy">今天还有 {{medicationPending}} 次药没记，点一下去看看</text>
-          <text class="medication-pending-arrow">›</text>
-        </button>
+          <view wx:if="{{authed && medicationPending > 0}}" class="home-notice" hover-class="home-notice-hover" hover-stay-time="80" aria-role="button" aria-label="今天还有 {{medicationPending}} 次药没记，去我的常用药" bindtap="goMedications">
+            <view class="home-notice-icon"><image src="/assets/home-icons/notice-pill.png" mode="aspectFit" /></view>
+            <text class="home-notice-copy">今天还有 {{medicationPending}} 次药没记</text>
+            <text class="home-notice-action">去记 ›</text>
+          </view>
 
-        <view wx:if="{{authed && reminderQuotaEmpty}}" class="reminder-quota">
-          <text class="reminder-quota-copy">明天的提醒还没准备好，点一下就好</text>
-          <button class="btn ghost reminder-quota-btn" loading="{{reminderPreparing}}" disabled="{{reminderPreparing}}" bindtap="prepareReminders">准备好</button>
+          <view wx:if="{{authed && reminderQuotaEmpty}}" class="home-notice {{reminderPreparing ? 'busy' : ''}}" hover-class="home-notice-hover" hover-stay-time="80" aria-role="button" aria-label="明天的提醒还没准备好，点一下准备好" bindtap="prepareReminders">
+            <view class="home-notice-icon"><image src="/assets/home-icons/notice-alarm.png" mode="aspectFit" /></view>
+            <text class="home-notice-copy">明天的提醒还没准备好</text>
+            <text class="home-notice-action">{{reminderPreparing ? '请稍候…' : '准备好 ›'}}</text>
+          </view>
         </view>
 
         <view class="home-section-title">最近记录总览</view>
