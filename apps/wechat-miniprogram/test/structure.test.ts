@@ -471,12 +471,15 @@ describe('wechat miniprogram structure', () => {
     expect(mineJs).toContain('planSummary(state.plans)');
 
     // Home quota row below the streak banner, never in guest mode.
-    expect(homeWxml).toContain('明天的提醒还没准备好，点一下就好');
+    expect(homeWxml).toContain('明天的提醒还没准备好');
+    expect(homeWxml).toContain('/assets/home-icons/notice-alarm.png');
     expect(homeWxml).toContain('bindtap="prepareReminders"');
     expect(homeWxml).toContain('wx:if="{{authed && reminderQuotaEmpty}}"');
     expect(homeWxml.indexOf('streakMessage')).toBeLessThan(homeWxml.indexOf('prepareReminders'));
     expect(homeJs).toContain('quotaEmptyMetrics(state)');
-    expect(homeWxss).toMatch(/\.reminder-quota-copy\s*\{[^}]*font-size:\s*26rpx/);
+    expect(homeWxss).toMatch(/\.home-notice-copy\s*\{[^}]*font-size:\s*28rpx/);
+    expect(homeWxss).toMatch(/\.home-notice\s*\{[^}]*min-height:\s*104rpx/);
+    expect(homeWxss).toMatch(/\.home-top\s*\{[^}]*gap:\s*16rpx/);
   });
 
   test('does not expose regulated service wording in uploadable source files', () => {
@@ -572,7 +575,8 @@ describe('wechat miniprogram structure', () => {
     expect(mineWxml.indexOf('我的常用药')).toBeLessThan(mineWxml.indexOf('给家人看近7天记录'));
     expect(mineJs).toContain('medicationSummary(state.medications)');
     expect(mineJs).toContain("wx.navigateTo({ url: '/pages/medications/index' })");
-    expect(homeWxml).toContain('次药没记，点一下去看看');
+    expect(homeWxml).toContain('次药没记</text>');
+    expect(homeWxml).toContain('/assets/home-icons/notice-pill.png');
     expect(homeWxml).toContain('bindtap="goMedications"');
     expect(homeWxml).toContain('wx:if="{{authed && medicationPending > 0}}"');
     expect(homeWxml.indexOf('streakMessage')).toBeLessThan(homeWxml.indexOf('goMedications'));
@@ -580,7 +584,7 @@ describe('wechat miniprogram structure', () => {
     expect(homeJs).toContain('pendingCount(state.today)');
     // Loaded right after the quota sync in performRefresh, i.e. only when not in guest mode.
     expect(homeJs).toContain('} else {\n      this.syncReminderQuota();\n      this.syncMedicationPending();');
-    expect(homeWxss).toMatch(/\.medication-pending\s*\{[^}]*min-height:\s*96rpx/);
+    expect(homeWxml).toMatch(/<view[^>]*class="home-notice[^"]*"[^>]*bindtap="goMedications"/);
     expect(recordJs).toContain('enabledTemplateMetrics(state)');
 
     // Weekly report line on the canvas and in the page.
