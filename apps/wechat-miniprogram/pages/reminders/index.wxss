@@ -11,12 +11,23 @@
 }
 
 .reminder-head {
+  /* The whole title row is the tap target (≥ 96rpx), so the switch itself can stay a normal size. */
   min-height: 104rpx;
-  padding-bottom: 16rpx;
+  margin: 0 -12rpx;
+  padding: 0 12rpx 16rpx;
   border-bottom: 1rpx solid var(--line);
   display: flex;
   align-items: center;
   gap: 16rpx;
+  border-radius: 16rpx 16rpx 0 0;
+}
+
+.reminder-head-hover {
+  background: var(--paper);
+}
+
+.reminder-head.busy {
+  opacity: .72;
 }
 
 .reminder-head-main {
@@ -38,51 +49,33 @@
   line-height: 1.5;
 }
 
+/* Slightly larger than the global .switch (118×54) for older eyes, but no longer a giant pill:
+   state is also spelled out in .reminder-state, so no text lives inside the track. */
 .reminder-switch {
-  width: 168rpx;
-  height: 88rpx;
-  min-height: 96rpx;
+  width: 112rpx;
+  height: 64rpx;
   flex: none;
-  padding: 0 24rpx;
-  border-radius: 999rpx;
-  position: relative;
-  isolation: isolate;
-  background: transparent;
-  color: #52655F;
-  font-size: 26rpx;
-  font-weight: 700;
-}
-
-.reminder-switch::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  top: 8rpx;
-  right: 0;
-  bottom: 8rpx;
-  left: 0;
+  padding: 0;
   border-radius: 999rpx;
   background: #DCE5E1;
-}
-
-.reminder-switch.on::before {
-  background: var(--ok);
+  transition: background .18s ease;
 }
 
 .reminder-switch .switch-knob {
-  top: 16rpx;
-  left: 16rpx;
-  width: 64rpx;
-  height: 64rpx;
+  top: 6rpx;
+  left: 6rpx;
+  width: 52rpx;
+  height: 52rpx;
   box-shadow: 0 3rpx 10rpx rgba(22, 48, 43, .16);
+  transition: left .18s ease;
+}
+
+.reminder-switch.on {
+  background: var(--ok);
 }
 
 .reminder-switch.on .switch-knob {
-  left: 88rpx;
-}
-
-.reminder-switch[disabled] {
-  opacity: .72;
+  left: 54rpx;
 }
 
 .reminder-picker {

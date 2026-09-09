@@ -459,7 +459,11 @@ describe('wechat miniprogram structure', () => {
     expect(remindersWxml).toContain('每次保存记录时微信会请您确认一次提醒，勾选「总是保持以上选择」以后就不再询问。');
     expect(remindersJsPage).toContain('requestSubscribe(this._state.templates, [card.metric])');
     expect(remindersJsPage).toContain('handleRequestError(this, error, requestToken)');
-    expect(remindersWxss).toMatch(/\.reminder-switch\s*\{[^}]*height:\s*96rpx/);
+    // The title row is the tap target; the switch itself stays a normal size without text inside.
+    expect(remindersWxml).toMatch(/<view class="reminder-head[^>]*bindtap="toggleReminder"/);
+    expect(remindersWxml).not.toContain("{{item.enabled ? '开' : '关'}}");
+    expect(remindersWxss).toMatch(/\.reminder-head\s*\{[^}]*min-height:\s*104rpx/);
+    expect(remindersWxss).toMatch(/\.reminder-switch\s*\{[^}]*width:\s*112rpx/);
     expect(remindersWxss).toMatch(/\.reminder-row\s*\{[^}]*min-height:\s*104rpx/);
 
     // Mine cell above the weekly report cell, hidden without templates.
