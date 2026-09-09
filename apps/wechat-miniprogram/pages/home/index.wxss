@@ -33,7 +33,7 @@
   gap: 16rpx;
   background: var(--card);
   border: 1rpx solid var(--line);
-  box-shadow: var(--shadow-card);
+  box-shadow: 0 2rpx 4rpx rgba(22, 48, 43, .05), 0 12rpx 36rpx rgba(22, 48, 43, .05);
 }
 
 .home-notice-hover {
