@@ -19,12 +19,12 @@
 
         <block wx:else>
           <view wx:for="{{cards}}" wx:key="metric" class="card reminder-card">
-            <view class="reminder-head">
+            <view class="reminder-head {{busyMetric === item.metric ? 'busy' : ''}}" hover-class="reminder-head-hover" hover-stay-time="80" aria-role="switch" aria-checked="{{item.enabled}}" aria-label="{{item.name}}提醒{{item.enabled ? '已开启' : '未开启'}}" data-metric="{{item.metric}}" bindtap="toggleReminder">
               <view class="reminder-head-main">
                 <view class="reminder-name">{{item.name}}提醒</view>
                 <view class="reminder-state">{{item.statusText}}</view>
               </view>
-              <button class="switch reminder-switch {{item.switchClass}}" disabled="{{busyMetric === item.metric}}" aria-label="{{item.name}}提醒{{item.enabled ? '已开启' : '未开启'}}" data-metric="{{item.metric}}" bindtap="toggleReminder"><text>{{item.enabled ? '开' : '关'}}</text><view class="switch-knob"></view></button>
+              <view class="switch reminder-switch {{item.switchClass}}"><view class="switch-knob"></view></view>
             </view>
             <view wx:if="{{!item.hasTime}}" class="reminder-row reminder-sub">{{item.subText}}</view>
             <picker wx:if="{{item.hasTime}}" class="reminder-picker" mode="time" value="{{item.time}}" disabled="{{busyMetric === item.metric}}" aria-label="{{item.name}}提醒时间 {{item.time}}" data-metric="{{item.metric}}" bindchange="onTimeChange">
