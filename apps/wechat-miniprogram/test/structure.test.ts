@@ -584,7 +584,7 @@ describe('wechat miniprogram structure', () => {
     expect(homeJs).toContain('pendingCount(state.today)');
     // Loaded right after the quota sync in performRefresh, i.e. only when not in guest mode.
     expect(homeJs).toContain('} else {\n      this.syncReminderQuota();\n      this.syncMedicationPending();');
-    expect(homeWxml).toMatch(/<view[^>]*class="home-notice[^"]*"[^>]*bindtap="goMedications"/);
+    expect(homeWxml).toMatch(/class="home-notice"[^\n]*bindtap="goMedications"/);
     expect(recordJs).toContain('enabledTemplateMetrics(state)');
 
     // Weekly report line on the canvas and in the page.
